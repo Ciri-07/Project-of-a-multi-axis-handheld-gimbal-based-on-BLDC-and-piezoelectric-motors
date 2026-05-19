@@ -90,9 +90,9 @@ Vdq_max = Vdq_max_svpwm;
 
 % Conservative current limit for this small high-resistance motor.
 %Iq_max = 0.10；                 带不动负载
-Iq_max = 0.3;                  % A最低限幅
+%Iq_max = 0.25;                  % A最低限幅
 %Iq_max = 1.00;
-%Iq_max = 0.25;                  % A
+Iq_max = 0.25;                  % A
 Id_max = 0.60;                  % A
 
 %% Simulation setup
