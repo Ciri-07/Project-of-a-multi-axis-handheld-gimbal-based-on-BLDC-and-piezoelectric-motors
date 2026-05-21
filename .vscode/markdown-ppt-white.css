@@ -1,0 +1,31 @@
+html,
+body,
+.vscode-body,
+.markdown-body {
+  background: #ffffff !important;
+  color: #1f2328 !important;
+}
+
+.markdown-body table,
+.markdown-body thead,
+.markdown-body tbody,
+.markdown-body tr,
+.markdown-body tr:nth-child(2n),
+.markdown-body th,
+.markdown-body td {
+  background: #ffffff !important;
+}
+
+.markdown-body table {
+  border-collapse: collapse !important;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border-color: #d0d7de !important;
+}
+
+.markdown-body pre,
+.markdown-body code {
+  background-color: #ffffff !important;
+}

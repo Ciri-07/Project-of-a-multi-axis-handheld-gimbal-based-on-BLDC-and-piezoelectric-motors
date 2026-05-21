@@ -1,0 +1,22 @@
+{
+  "workbench.colorTheme": "GitHub Light Default",
+  "workbench.colorCustomizations": {
+    "editor.background": "#FFFFFF",
+    "editorGutter.background": "#FFFFFF",
+    "sideBar.background": "#FFFFFF",
+    "activityBar.background": "#FFFFFF",
+    "titleBar.activeBackground": "#FFFFFF",
+    "titleBar.inactiveBackground": "#FFFFFF",
+    "statusBar.background": "#FFFFFF",
+    "panel.background": "#FFFFFF",
+    "terminal.background": "#FFFFFF",
+    "notebook.editorBackground": "#FFFFFF",
+    "breadcrumb.background": "#FFFFFF",
+    "tab.activeBackground": "#FFFFFF",
+    "tab.inactiveBackground": "#FFFFFF",
+    "editor.lineHighlightBackground": "#FFFFFF00"
+  },
+  "markdown.styles": [
+    ".vscode/markdown-ppt-white.css"
+  ]
+}
