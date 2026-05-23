@@ -1,0 +1,5 @@
+﻿method_id,method_cn,max_error_deg,rms_error_deg
+raw_nominal_compensation,未补偿,3.10624035127337,1.29559064235862
+offset_amplitude_phase_compensation,补偿零偏_幅值_相位,1.70371896279542,0.821778930997332
+signal_domain_harmonic_reconstruction,信号域谐波补偿,0.494038453886381,0.203125390247838
+angle_domain_fourier_compensation,角度域傅里叶补偿,0.125024413045026,0.0418495607425293

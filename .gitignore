@@ -1,0 +1,8 @@
+# MATLAB editor backup files
+*.asv
+
+# Simulink generated cache/build folders
+*.slxc
+slprj/
+**/slprj/
+

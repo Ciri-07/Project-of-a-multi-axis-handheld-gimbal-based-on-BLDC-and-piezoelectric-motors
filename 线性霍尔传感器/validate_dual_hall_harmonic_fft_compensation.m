@@ -153,6 +153,55 @@ metrics = [
 %四行分别是：未补偿、基础补偿、信号域谐波补偿、角度域傅里叶补偿。
 %两列分别是：最大误差、RMS 误差
 
+% 固定当前基准版本的核心误差指标，便于后续调参和新算法对比。
+baselineMethod = [
+    "raw_nominal_compensation";
+    "offset_amplitude_phase_compensation";
+    "signal_domain_harmonic_reconstruction";
+    "angle_domain_fourier_compensation"
+];
+baselineMethodCn = [
+    "未补偿";
+    "补偿零偏_幅值_相位";
+    "信号域谐波补偿";
+    "角度域傅里叶补偿"
+];
+baselineMetricsTable = table(baselineMethod, baselineMethodCn, metrics(:,1), metrics(:,2), ...
+    'VariableNames', {'method_id', 'method_cn', 'max_error_deg', 'rms_error_deg'});
+baselineMetricsPath = fullfile(figDir, 'dual_hall_harmonic_baseline_metrics.csv');
+writetable(baselineMetricsTable, baselineMetricsPath);
+prepend_utf8_bom(baselineMetricsPath);
+
+baselineReportPath = fullfile(scriptDir, 'dual_hall_harmonic_baseline_report.txt');
+fid = fopen(baselineReportPath, 'w', 'n', 'UTF-8');
+if fid < 0
+    error('Cannot create baseline report: %s', baselineReportPath);
+end
+cleanupObj = onCleanup(@() fclose(fid));
+fwrite(fid, [239 187 191], 'uint8');
+fprintf(fid, '双线性霍尔谐波补偿基准仿真结果\n');
+fprintf(fid, '生成脚本: validate_dual_hall_harmonic_fft_compensation.m\n');
+fprintf(fid, '基准时间: %s\n\n', datestr(now, 'yyyy-mm-dd HH:MM:SS'));
+fprintf(fid, '参数概要:\n');
+fprintf(fid, '  极对数 p = %d\n', hall_pole_pairs);
+fprintf(fid, '  磁场基波频率 = %.6g Hz\n', hall_f_mag_hz);
+fprintf(fid, '  机械转速 = %.6g rpm\n', hall_mech_speed_rpm);
+fprintf(fid, '  注入谐波阶次 = %s\n', mat2str(hall_harm_orders));
+fprintf(fid, '  正弦通道幅值 = %.6g V, 余弦通道幅值 = %.6g V\n', hall_amp_s_v, hall_amp_c_v);
+fprintf(fid, '  正弦零偏误差 = %.6g V, 余弦零偏误差 = %.6g V\n', hall_offset_err_s_v, hall_offset_err_c_v);
+fprintf(fid, '  相位不正交误差 = %.6g deg\n\n', hall_phase_err_deg);
+fprintf(fid, '误差指标:\n');
+for row = 1:height(baselineMetricsTable)
+    fprintf(fid, '  %s: max = %.4f deg, rms = %.4f deg\n', ...
+        baselineMetricsTable.method_cn(row), ...
+        baselineMetricsTable.max_error_deg(row), ...
+        baselineMetricsTable.rms_error_deg(row));
+end
+fprintf(fid, '\n说明:\n');
+fprintf(fid, '  图 d 中红色误差曲线对应基础补偿后、谐波补偿前的误差；\n');
+fprintf(fid, '  完全未补偿误差记录在本报告和 CSV 的第一行，不直接显示在图 d 中。\n');
+clear cleanupObj
+
 fprintf('\nDual-Hall harmonic compensation validation\n');
 fprintf('Injected Hall signal harmonic orders: %s\n', mat2str(hall_harm_orders));
 fprintf('Estimated phase error = %.3f deg, actual = %.3f deg\n', ...
@@ -248,17 +297,17 @@ plot(t(time_plot_idx), wrap_pi(theta_mag_basic(time_plot_idx)), 'k', 'LineWidth'
 ylabel('Position / rad')
 ylim([-pi pi])
 yyaxis right
-plot(t(time_plot_idx), theta_m_err_basic(time_plot_idx), 'r', 'LineWidth', 1.0)
+plot(t(time_plot_idx), rad2deg(theta_m_err_basic(time_plot_idx)), 'r', 'LineWidth', 1.0)
 hold on
-plot(t(time_plot_idx), theta_m_err_anglecomp(time_plot_idx), 'b', 'LineWidth', 1.0)
-ylabel('Position error / rad')
+plot(t(time_plot_idx), rad2deg(theta_m_err_anglecomp(time_plot_idx)), 'b', 'LineWidth', 1.0)
+ylabel('Position error / deg')
 axD = gca;
 axD.YAxis(1).Color = 'k';
 axD.YAxis(2).Color = 'r';
 grid on
 xlabel('Time / s')
 title('(d) Raw position and position error')
-legend('Raw position', 'Position error before harmonic comp', ...
+legend('Raw position', 'Position error after basic comp', ...
     'Position error after harmonic comp', 'Location', 'southoutside', 'NumColumns', 1)
 
 axs = findall(fig, 'Type', 'Axes');
@@ -279,6 +328,8 @@ exportgraphics(fig, pngPath, 'Resolution', 220);
 
 fprintf('Saved harmonic validation figure:\n%s\n', pngPath);
 fprintf('Saved FFT order table:\n%s\n', csvPath);
+fprintf('Saved baseline metrics:\n%s\n', baselineMetricsPath);
+fprintf('Saved baseline report:\n%s\n', baselineReportPath);
 %保存图片
 
 %% Local helper functions
@@ -352,4 +403,27 @@ switch n
     otherwise
         txt = sprintf('%dth', n);
 end
+end
+
+function prepend_utf8_bom(filePath)
+% 给含中文的 CSV/TXT 增加 UTF-8 BOM，避免 Windows 工具误判编码。
+fid = fopen(filePath, 'r');
+if fid < 0
+    return
+end
+data = fread(fid, '*uint8');
+fclose(fid);
+
+bom = uint8([239; 187; 191]);
+if numel(data) >= 3 && all(data(1:3) == bom)
+    return
+end
+
+fid = fopen(filePath, 'w');
+if fid < 0
+    return
+end
+fwrite(fid, bom, 'uint8');
+fwrite(fid, data, 'uint8');
+fclose(fid);
 end
