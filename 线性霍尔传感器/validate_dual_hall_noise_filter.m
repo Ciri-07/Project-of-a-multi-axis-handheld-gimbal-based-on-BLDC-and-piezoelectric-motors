@@ -1,9 +1,13 @@
-%% 双线性霍尔 ADC量化、白噪声和低通滤波验证
-% 本脚本基于当前谐波补偿基准模型继续向实机采样靠近：
-%   1. 先生成含零偏、幅值不一致、相位不正交和2/3/5/6次谐波的Hall信号；
-%   2. 使用无噪声数据建立一组固定的离线补偿系数；
-%   3. 分别验证无噪声、仅ADC、ADC+噪声、ADC+噪声+低通滤波四种情况；
-%   4. 对比基础补偿、信号域谐波补偿和角度域傅里叶补偿后的解角误差。
+%% 双线性霍尔 ADC/噪声/低通滤波/alpha-beta 滤波对比验证
+% 本脚本基于当前谐波补偿基准模型，继续向真实采样系统靠近：
+%   1. 生成含零偏、幅值不一致、相位不正交和 2/3/5/6 次谐波的 Hall 信号；
+%   2. 加入 ADC 量化和白噪声；
+%   3. 对比两种噪声处理方式：
+%      - 一阶低通：对采样后的 Hall 电压滤波，再进入补偿链路；
+%      - alpha-beta：先完成确定性补偿和 atan2 解角，再对角度做状态估计。
+%
+% 重点观察：低通滤波会压制电压噪声，但可能引入相位滞后；
+% alpha-beta 滤波利用角度-速度运动模型，通常比直接低通电压更适合云台角度估计。
 
 clear
 clc
@@ -20,7 +24,7 @@ if ~exist(figDir, 'dir')
     mkdir(figDir);
 end
 
-%% 生成无噪声基准Hall信号
+%% 生成无噪声基准 Hall 信号
 t = (0:hall_ts_sim_s:hall_t_stop_s).';
 theta_m = hall_omega_mech_rad_s*t;
 theta_mag = hall_pole_pairs*theta_m + hall_theta0_rad;
@@ -29,7 +33,7 @@ plot_idx = t <= min(hall_noise_fig_window_s, hall_t_stop_s);
 
 [hall_s_clean_v, hall_c_clean_v] = generate_clean_hall_signal(theta_mag, P);
 
-%% 构造ADC量化和白噪声信号
+%% 加入 ADC 量化和白噪声
 rng(hall_noise_seed);
 hall_s_noise_v = hall_noise_rms_v*randn(size(hall_s_clean_v));
 hall_c_noise_v = hall_noise_rms_v*randn(size(hall_c_clean_v));
@@ -40,55 +44,67 @@ hall_c_adc_v = adc_quantize(hall_c_clean_v, P);
 hall_s_noisy_adc_v = adc_quantize(hall_s_clean_v + hall_s_noise_v, P);
 hall_c_noisy_adc_v = adc_quantize(hall_c_clean_v + hall_c_noise_v, P);
 
+% 一阶低通作用在 Hall 电压上，是“补偿前”的信号调理。
 hall_s_filt_v = first_order_lpf(hall_s_noisy_adc_v, hall_lpf_alpha);
 hall_c_filt_v = first_order_lpf(hall_c_noisy_adc_v, hall_lpf_alpha);
 
-%% 用无噪声数据建立固定补偿系数
+%% 用无噪声数据建立固定离线补偿系数
 cal = estimate_baseline_calibration(hall_s_clean_v, hall_c_clean_v, theta_mag, calib_idx, P);
 
-%% 对四种采样情况执行同一套补偿链路
+%% 对不同采样链路执行同一套确定性补偿
 result_clean = apply_compensation_chain(hall_s_clean_v, hall_c_clean_v, theta_mag, cal, P);
 result_adc = apply_compensation_chain(hall_s_adc_v, hall_c_adc_v, theta_mag, cal, P);
 result_noisy = apply_compensation_chain(hall_s_noisy_adc_v, hall_c_noisy_adc_v, theta_mag, cal, P);
-result_filt = apply_compensation_chain(hall_s_filt_v, hall_c_filt_v, theta_mag, cal, P);
+result_lpf = apply_compensation_chain(hall_s_filt_v, hall_c_filt_v, theta_mag, cal, P);
 
+%% alpha-beta 角度估计
+% alpha-beta 不滤 Hall 电压，而是对补偿后的连续角度进行“角度-速度”状态估计。
+[theta_ab_mag, omega_ab_mag] = alpha_beta_filter( ...
+    result_noisy.theta_anglecomp, hall_ts_sim_s, hall_ab_alpha, hall_ab_beta);
+theta_ab_mag = align_angle(theta_ab_mag, theta_mag);
+err_ab = wrap_pi(theta_ab_mag - theta_mag)/P.pole_pairs;
+omega_ab_mech = omega_ab_mag/P.pole_pairs;
+
+%% 误差指标
 scenarioNames = [
     "clean_baseline";
     "adc_quantization";
     "adc_plus_noise";
-    "adc_noise_lowpass"
+    "adc_noise_voltage_lpf";
+    "adc_noise_alpha_beta"
 ];
-scenarioNamesCn = [
-    "无噪声基准";
-    "仅ADC量化";
-    "ADC量化+白噪声";
-    "ADC量化+白噪声+低通滤波"
+scenarioNamesShort = [
+    "Clean";
+    "ADC";
+    "ADC+noise";
+    "Voltage LPF";
+    "Alpha-beta"
 ];
 
-results = {result_clean; result_adc; result_noisy; result_filt};
-metrics = zeros(numel(results), 6);
-for k = 1:numel(results)
-    metrics(k,:) = [
-        max(abs(rad2deg(results{k}.err_basic))), rms_local(rad2deg(results{k}.err_basic)), ...
-        max(abs(rad2deg(results{k}.err_sigcomp))), rms_local(rad2deg(results{k}.err_sigcomp)), ...
-        max(abs(rad2deg(results{k}.err_anglecomp))), rms_local(rad2deg(results{k}.err_anglecomp))
-    ];
+finalErrors = {
+    result_clean.err_anglecomp;
+    result_adc.err_anglecomp;
+    result_noisy.err_anglecomp;
+    result_lpf.err_anglecomp;
+    err_ab
+};
+
+metrics = zeros(numel(finalErrors), 2);
+for k = 1:numel(finalErrors)
+    err_deg = rad2deg(finalErrors{k});
+    metrics(k,:) = [max(abs(err_deg)), rms_local(err_deg)];
 end
 
-metricsTable = table(scenarioNames, scenarioNamesCn, ...
-    metrics(:,1), metrics(:,2), metrics(:,3), metrics(:,4), metrics(:,5), metrics(:,6), ...
-    'VariableNames', {'scenario_id', 'scenario_cn', ...
-    'basic_max_deg', 'basic_rms_deg', ...
-    'signal_harmonic_max_deg', 'signal_harmonic_rms_deg', ...
-    'angle_fourier_max_deg', 'angle_fourier_rms_deg'});
+metricsTable = table(scenarioNames, scenarioNamesShort, metrics(:,1), metrics(:,2), ...
+    'VariableNames', {'scenario_id', 'scenario_label', 'final_max_deg', 'final_rms_deg'});
 
-csvPath = fullfile(figDir, 'dual_hall_noise_filter_metrics.csv');
+csvPath = fullfile(figDir, 'dual_hall_noise_lpf_ab_metrics.csv');
 writetable(metricsTable, csvPath);
 prepend_utf8_bom(csvPath);
 
-%% 绘图
-fig = figure('Name', 'Dual Hall ADC Noise Filter Validation', ...
-    'Color', 'w', 'Position', [70 70 1250 720]);
+%% 绘图：重点比较 LPF 与 alpha-beta
+fig = figure('Name', 'Dual Hall ADC Noise LPF Alpha-Beta Validation', ...
+    'Color', 'w', 'Position', [70 70 1280 760]);
 tiledlayout(fig, 2, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
 
 nexttile
@@ -99,41 +115,52 @@ plot(t(plot_idx), hall_s_filt_v(plot_idx), 'b', 'LineWidth', 1.0)
 grid on
 xlabel('Time / s')
 ylabel('Hall voltage / V')
-title('(a) H_s voltage: clean, noisy ADC and low-pass filtered')
-legend('clean', 'ADC + noise', 'ADC + noise + LPF', 'Location', 'southoutside', 'NumColumns', 3)
+title('(a) H_s voltage: clean, ADC+noise and voltage LPF')
+legend('clean', 'ADC + noise', 'ADC + noise + LPF', ...
+    'Location', 'southoutside', 'NumColumns', 3)
 
 nexttile
-plot(t(plot_idx), (hall_s_adc_v(plot_idx) - hall_s_clean_v(plot_idx))*1e3, 'Color', [0.45 0.45 0.45], 'LineWidth', 0.9)
+plot(t(plot_idx), (hall_s_adc_v(plot_idx) - hall_s_clean_v(plot_idx))*1e3, ...
+    'Color', [0.45 0.45 0.45], 'LineWidth', 0.9)
 hold on
-plot(t(plot_idx), (hall_s_noisy_adc_v(plot_idx) - hall_s_clean_v(plot_idx))*1e3, 'r', 'LineWidth', 0.8)
-plot(t(plot_idx), (hall_s_filt_v(plot_idx) - hall_s_clean_v(plot_idx))*1e3, 'b', 'LineWidth', 0.9)
+plot(t(plot_idx), (hall_s_noisy_adc_v(plot_idx) - hall_s_clean_v(plot_idx))*1e3, ...
+    'r', 'LineWidth', 0.8)
+plot(t(plot_idx), (hall_s_filt_v(plot_idx) - hall_s_clean_v(plot_idx))*1e3, ...
+    'b', 'LineWidth', 0.9)
 grid on
 xlabel('Time / s')
 ylabel('Voltage error / mV')
-title('(b) Sampling error relative to clean H_s')
-legend('ADC only', 'ADC + noise', 'after LPF', 'Location', 'southoutside', 'NumColumns', 3)
+title('(b) Voltage-domain sampling error relative to clean H_s')
+legend('ADC only', 'ADC + noise', 'after voltage LPF', ...
+    'Location', 'southoutside', 'NumColumns', 3)
 
 nexttile
-plot(t(plot_idx), rad2deg(result_clean.err_anglecomp(plot_idx)), 'k', 'LineWidth', 1.0)
+plot(t(plot_idx), rad2deg(result_clean.err_anglecomp(plot_idx)), ...
+    'k', 'LineWidth', 1.0)
 hold on
-plot(t(plot_idx), rad2deg(result_noisy.err_anglecomp(plot_idx)), 'r', 'LineWidth', 0.8)
-plot(t(plot_idx), rad2deg(result_filt.err_anglecomp(plot_idx)), 'b', 'LineWidth', 1.0)
+plot(t(plot_idx), rad2deg(result_noisy.err_anglecomp(plot_idx)), ...
+    'Color', [0.85 0.10 0.10], 'LineWidth', 0.8)
+plot(t(plot_idx), rad2deg(result_lpf.err_anglecomp(plot_idx)), ...
+    'b', 'LineWidth', 1.0)
+plot(t(plot_idx), rad2deg(err_ab(plot_idx)), ...
+    'Color', [0.00 0.55 0.20], 'LineWidth', 1.1)
 grid on
 xlabel('Time / s')
 ylabel('Mechanical angle error / deg')
-title('(c) Final angle error after deterministic compensation')
-legend('clean baseline', 'ADC + noise', 'ADC + noise + LPF', 'Location', 'southoutside', 'NumColumns', 3)
+title('(c) Angle error: voltage LPF versus alpha-beta')
+legend('clean baseline', 'ADC + noise', 'voltage LPF', 'alpha-beta angle estimate', ...
+    'Location', 'southoutside', 'NumColumns', 2)
 
 nexttile
-barData = [metrics(:,5), metrics(:,6)];
+barData = [metrics(:,1), metrics(:,2)];
 b = bar(barData);
 b(1).FaceColor = [0.30 0.55 0.90];
 b(2).FaceColor = [0.90 0.55 0.25];
 grid on
-set(gca, 'XTickLabel', scenarioNamesCn)
+set(gca, 'XTickLabel', scenarioNamesShort)
 xtickangle(20)
 ylabel('Mechanical angle error / deg')
-title('(d) Final angle-domain compensation metrics')
+title('(d) Final angle-estimation metrics')
 legend('max error', 'RMS error', 'Location', 'northwest')
 
 axs = findall(fig, 'Type', 'Axes');
@@ -148,19 +175,22 @@ for ax = reshape(axs, 1, [])
     end
 end
 
-pngPath = fullfile(figDir, 'dual_hall_noise_filter_validation.png');
+pngPath = fullfile(figDir, 'dual_hall_noise_lpf_ab_validation.png');
 exportgraphics(fig, pngPath, 'Resolution', 220);
 
-fprintf('\nDual-Hall ADC/noise/filter validation\n');
+fprintf('\nDual-Hall ADC/noise/LPF/alpha-beta validation\n');
 fprintf('ADC resolution: %d bit, LSB = %.4g V\n', hall_adc_bits, hall_adc_lsb_v);
-fprintf('Noise RMS: %.4g V, LPF cutoff: %.4g Hz\n', hall_noise_rms_v, hall_lpf_cutoff_hz);
-fprintf('\nFinal angle-domain compensation metrics:\n');
+fprintf('Noise RMS: %.4g V\n', hall_noise_rms_v);
+fprintf('Voltage LPF cutoff: %.4g Hz\n', hall_lpf_cutoff_hz);
+fprintf('Alpha-beta: alpha = %.4g, beta = %.4g\n', hall_ab_alpha, hall_ab_beta);
+fprintf('\nFinal angle metrics:\n');
 for k = 1:height(metricsTable)
-    fprintf('  %s: max %.4f deg, rms %.4f deg\n', ...
-        metricsTable.scenario_cn(k), metricsTable.angle_fourier_max_deg(k), metricsTable.angle_fourier_rms_deg(k));
+    fprintf('  %-18s max %.4f deg, rms %.4f deg\n', ...
+        metricsTable.scenario_label(k), metricsTable.final_max_deg(k), metricsTable.final_rms_deg(k));
 end
-fprintf('\nSaved noise/filter validation figure:\n%s\n', pngPath);
-fprintf('Saved noise/filter metrics:\n%s\n', csvPath);
+fprintf('\nAlpha-beta final speed estimate mean: %.4f rad/s mechanical\n', mean(omega_ab_mech(calib_idx)));
+fprintf('Saved validation figure:\n%s\n', pngPath);
+fprintf('Saved metrics:\n%s\n', csvPath);
 
 %% 局部函数
 function P = collect_hall_params
@@ -218,6 +248,26 @@ y = zeros(size(x));
 y(1) = x(1);
 for idx = 2:numel(x)
     y(idx) = alpha*y(idx-1) + (1 - alpha)*x(idx);
+end
+end
+
+function [theta_hat, omega_hat] = alpha_beta_filter(theta_meas, Ts, alpha, beta)
+theta_meas = theta_meas(:);
+theta_hat = zeros(size(theta_meas));
+omega_hat = zeros(size(theta_meas));
+
+theta_hat(1) = theta_meas(1);
+if numel(theta_meas) >= 2
+    omega_hat(1) = (theta_meas(2) - theta_meas(1))/Ts;
+end
+
+for idx = 2:numel(theta_meas)
+    theta_pred = theta_hat(idx-1) + Ts*omega_hat(idx-1);
+    omega_pred = omega_hat(idx-1);
+
+    innovation = theta_meas(idx) - theta_pred;
+    theta_hat(idx) = theta_pred + alpha*innovation;
+    omega_hat(idx) = omega_pred + beta/Ts*innovation;
 end
 end
 
