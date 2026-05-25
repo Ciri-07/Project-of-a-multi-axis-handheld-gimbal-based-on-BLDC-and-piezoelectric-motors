@@ -46,7 +46,7 @@ hall_c_noisy_adc_v = adc_quantize(hall_c_clean_v + hall_c_noise_v, P);
 
 % 一阶低通作用在 Hall 电压上，是“补偿前”的信号调理。
 hall_s_filt_v = first_order_lpf(hall_s_noisy_adc_v, hall_lpf_alpha);
-hall_c_filt_v = first_order_lpf(hall_c_noisy_adc_v, hall_lpf_alpha);
+hall_c_filt_v = first_order_lpf(hall_c_noisy_adc_v, hall_lpf_alpha);%调用lpffunc
 
 %% 用无噪声数据建立固定离线补偿系数
 cal = estimate_baseline_calibration(hall_s_clean_v, hall_c_clean_v, theta_mag, calib_idx, P);
@@ -60,10 +60,20 @@ result_lpf = apply_compensation_chain(hall_s_filt_v, hall_c_filt_v, theta_mag, c
 %% alpha-beta 角度估计
 % alpha-beta 不滤 Hall 电压，而是对补偿后的连续角度进行“角度-速度”状态估计。
 [theta_ab_mag, omega_ab_mag] = alpha_beta_filter( ...
-    result_noisy.theta_anglecomp, hall_ts_sim_s, hall_ab_alpha, hall_ab_beta);
-theta_ab_mag = align_angle(theta_ab_mag, theta_mag);
-err_ab = wrap_pi(theta_ab_mag - theta_mag)/P.pole_pairs;
-omega_ab_mech = omega_ab_mag/P.pole_pairs;
+    result_noisy.theta_anglecomp, hall_ts_sim_s, hall_ab_alpha, hall_ab_beta);%调用αβfunc
+theta_ab_mag = align_angle(theta_ab_mag, theta_mag);%对齐角度展开后的初始周期
+err_ab = wrap_pi(theta_ab_mag - theta_mag)/P.pole_pairs;%把误差限制到 [−π,π]
+omega_ab_mech = omega_ab_mag/P.pole_pairs;%从磁场角误差转换为机械角误差
+
+%% discrete ESO angle estimator after Hall angle decoding
+% ESO estimates z1=angle, z2=angular speed and z3=total disturbance.
+[theta_eso_mag, omega_eso_mag, disturbance_eso_mag] = discrete_eso_filter( ...
+    result_noisy.theta_anglecomp, hall_ts_sim_s, ...
+    hall_eso_beta1, hall_eso_beta2, hall_eso_beta3);
+theta_eso_mag = align_angle(theta_eso_mag, theta_mag);
+err_eso = wrap_pi(theta_eso_mag - theta_mag)/P.pole_pairs;
+omega_eso_mech = omega_eso_mag/P.pole_pairs;
+disturbance_eso_mech = disturbance_eso_mag/P.pole_pairs;
 
 %% 误差指标
 scenarioNames = [
@@ -71,14 +81,16 @@ scenarioNames = [
     "adc_quantization";
     "adc_plus_noise";
     "adc_noise_voltage_lpf";
-    "adc_noise_alpha_beta"
+    "adc_noise_alpha_beta";
+    "adc_noise_discrete_eso"
 ];
 scenarioNamesShort = [
     "Clean";
     "ADC";
     "ADC+noise";
     "Voltage LPF";
-    "Alpha-beta"
+    "Alpha-beta";
+    "Discrete ESO"
 ];
 
 finalErrors = {
@@ -86,7 +98,8 @@ finalErrors = {
     result_adc.err_anglecomp;
     result_noisy.err_anglecomp;
     result_lpf.err_anglecomp;
-    err_ab
+    err_ab;
+    err_eso
 };
 
 metrics = zeros(numel(finalErrors), 2);
@@ -98,13 +111,13 @@ end
 metricsTable = table(scenarioNames, scenarioNamesShort, metrics(:,1), metrics(:,2), ...
     'VariableNames', {'scenario_id', 'scenario_label', 'final_max_deg', 'final_rms_deg'});
 
-csvPath = fullfile(figDir, 'dual_hall_noise_lpf_ab_metrics.csv');
+csvPath = fullfile(figDir, 'dual_hall_noise_lpf_ab_eso_metrics.csv');
 writetable(metricsTable, csvPath);
 prepend_utf8_bom(csvPath);
 
 %% 绘图：重点比较 LPF 与 alpha-beta
 fig = figure('Name', 'Dual Hall ADC Noise LPF Alpha-Beta Validation', ...
-    'Color', 'w', 'Position', [70 70 1280 760]);
+    'Color', 'w', 'Position', [70 70 1200 700]);
 tiledlayout(fig, 2, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
 
 nexttile
@@ -144,11 +157,13 @@ plot(t(plot_idx), rad2deg(result_lpf.err_anglecomp(plot_idx)), ...
     'b', 'LineWidth', 1.0)
 plot(t(plot_idx), rad2deg(err_ab(plot_idx)), ...
     'Color', [0.00 0.55 0.20], 'LineWidth', 1.1)
+plot(t(plot_idx), rad2deg(err_eso(plot_idx)), ...
+    'Color', [0.55 0.00 0.75], 'LineWidth', 1.1)
 grid on
 xlabel('Time / s')
 ylabel('Mechanical angle error / deg')
-title('(c) Angle error: voltage LPF versus alpha-beta')
-legend('clean baseline', 'ADC + noise', 'voltage LPF', 'alpha-beta angle estimate', ...
+title('(c) Angle error: voltage LPF, alpha-beta and ESO')
+legend('clean baseline', 'ADC + noise', 'voltage LPF', 'alpha-beta', 'discrete ESO', ...
     'Location', 'southoutside', 'NumColumns', 2)
 
 nexttile
@@ -175,7 +190,7 @@ for ax = reshape(axs, 1, [])
     end
 end
 
-pngPath = fullfile(figDir, 'dual_hall_noise_lpf_ab_validation.png');
+pngPath = fullfile(figDir, 'dual_hall_noise_lpf_ab_eso_validation.png');
 exportgraphics(fig, pngPath, 'Resolution', 220);
 
 fprintf('\nDual-Hall ADC/noise/LPF/alpha-beta validation\n');
@@ -183,12 +198,15 @@ fprintf('ADC resolution: %d bit, LSB = %.4g V\n', hall_adc_bits, hall_adc_lsb_v)
 fprintf('Noise RMS: %.4g V\n', hall_noise_rms_v);
 fprintf('Voltage LPF cutoff: %.4g Hz\n', hall_lpf_cutoff_hz);
 fprintf('Alpha-beta: alpha = %.4g, beta = %.4g\n', hall_ab_alpha, hall_ab_beta);
+fprintf('Discrete ESO bandwidth: %.4g Hz\n', hall_eso_bandwidth_hz);
 fprintf('\nFinal angle metrics:\n');
 for k = 1:height(metricsTable)
     fprintf('  %-18s max %.4f deg, rms %.4f deg\n', ...
         metricsTable.scenario_label(k), metricsTable.final_max_deg(k), metricsTable.final_rms_deg(k));
 end
 fprintf('\nAlpha-beta final speed estimate mean: %.4f rad/s mechanical\n', mean(omega_ab_mech(calib_idx)));
+fprintf('ESO final speed estimate mean: %.4f rad/s mechanical\n', mean(omega_eso_mech(calib_idx)));
+fprintf('ESO disturbance estimate RMS: %.4f rad/s^2 mechanical\n', rms_local(disturbance_eso_mech(calib_idx)));
 fprintf('Saved validation figure:\n%s\n', pngPath);
 fprintf('Saved metrics:\n%s\n', csvPath);
 
@@ -244,9 +262,9 @@ y = adc_code/adc_max*P.vref_v;
 end
 
 function y = first_order_lpf(x, alpha)
-y = zeros(size(x));
-y(1) = x(1);
-for idx = 2:numel(x)
+y = zeros(size(x));     %初始化输出数组，长度与输入一致
+y(1) = x(1);            %第一拍没有历史滤波值，直接用当前输入作为初值
+for idx = 2:numel(x)    %从第二个采样点开始递推
     y(idx) = alpha*y(idx-1) + (1 - alpha)*x(idx);
 end
 end
@@ -268,6 +286,24 @@ for idx = 2:numel(theta_meas)
     innovation = theta_meas(idx) - theta_pred;
     theta_hat(idx) = theta_pred + alpha*innovation;
     omega_hat(idx) = omega_pred + beta/Ts*innovation;
+end
+end
+
+function [z1, z2, z3] = discrete_eso_filter(theta_meas, Ts, beta1, beta2, beta3)
+theta_meas = theta_meas(:);
+z1 = zeros(size(theta_meas));
+z2 = zeros(size(theta_meas));
+z3 = zeros(size(theta_meas));
+
+z1(1) = theta_meas(1);
+z2(1) = 0;
+z3(1) = 0;
+
+for idx = 2:numel(theta_meas)
+    err = theta_meas(idx-1) - z1(idx-1);
+    z1(idx) = z1(idx-1) + Ts*(z2(idx-1) + beta1*err);
+    z2(idx) = z2(idx-1) + Ts*(z3(idx-1) + beta2*err);
+    z3(idx) = z3(idx-1) + Ts*(beta3*err);
 end
 end
 

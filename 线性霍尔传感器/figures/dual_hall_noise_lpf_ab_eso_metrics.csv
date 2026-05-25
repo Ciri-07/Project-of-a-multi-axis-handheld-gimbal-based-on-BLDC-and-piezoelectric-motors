@@ -1,0 +1,7 @@
+﻿scenario_id,scenario_label,final_max_deg,final_rms_deg
+clean_baseline,Clean,0.125024413045026,0.0418495607425293
+adc_quantization,ADC,0.125277294473056,0.0418535293521166
+adc_plus_noise,ADC+noise,0.628763684231454,0.116409322171755
+adc_noise_voltage_lpf,Voltage LPF,0.522738584167598,0.293526039603714
+adc_noise_alpha_beta,Alpha-beta,0.305521088167704,0.0623494742314208
+adc_noise_discrete_eso,Discrete ESO,0.319872764425589,0.0648304722001474

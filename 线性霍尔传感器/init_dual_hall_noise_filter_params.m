@@ -25,4 +25,12 @@ hall_lpf_alpha = exp(-hall_ts_sim_s/hall_lpf_tau_s); % 离散一阶低通系数
 hall_ab_alpha = 0.22;            % 角度修正系数
 hall_ab_beta = 0.018;            % 速度修正系数
 
+% 离散 ESO 参数。ESO 在角度域估计 z1=角度、z2=角速度、z3=总扰动。
+% 带宽越高，跟踪越快，但对噪声越敏感；带宽越低，输出越平滑但动态滞后越大。
+hall_eso_bandwidth_hz = 80;      % Hz，ESO 观测器带宽
+hall_eso_omega_o_rad_s = 2*pi*hall_eso_bandwidth_hz;  % rad/s，ESO 观测器带宽
+hall_eso_beta1 = 3*hall_eso_omega_o_rad_s;            % ESO 角度误差反馈增益
+hall_eso_beta2 = 3*hall_eso_omega_o_rad_s^2;          % ESO 角速度误差反馈增益
+hall_eso_beta3 = hall_eso_omega_o_rad_s^3;            % ESO 总扰动误差反馈增益
+
 hall_noise_fig_window_s = 0.5;   % s，结果图显示窗口
