@@ -439,6 +439,380 @@ end
 fprintf('\nSaved dynamic figures:\n%s\n%s\n', dynPngPath, dynMetricsPngPath);
 fprintf('Saved dynamic metrics:\n%s\n', dynCsvPath);
 
+%% Hall + Gyro complementary/Kalman fusion validation
+% Hall 给出补偿后的绝对/低频角度，Gyro 给出高频角速度。
+% 互补滤波用 gyro 短时积分预测角度，再用 Hall 角度慢速拉回漂移；
+% Kalman 滤波进一步把 gyro 零偏作为状态估计，适合后续 IMU 融合扩展。
+fusionMethodLabels = [
+    "Hall raw";
+    "Alpha-beta";
+    "Discrete ESO";
+    "Gyro integration";
+    "Complementary";
+    "Kalman"
+];
+fusionLineColors = [
+    0.80 0.10 0.10
+    0.00 0.55 0.20
+    0.55 0.00 0.75
+    0.45 0.45 0.45
+    0.10 0.25 0.90
+    0.00 0.00 0.00
+];
+
+fusionMetrics = table('Size', [0 5], ...
+    'VariableTypes', {'string', 'string', 'string', 'double', 'double'}, ...
+    'VariableNames', {'scenario_id', 'scenario_label', 'method', 'max_error_deg', 'rms_error_deg'});
+fusionData = struct([]);
+
+for s = 1:numel(dynData)
+    data = dynData(s);
+    gyro = make_gyro_measurement( ...
+        data.omega_true, dyn_t, ...
+        hall_gyro_bias_rad_s, hall_gyro_bias_drift_rad_s2, ...
+        hall_gyro_noise_rms_rad_s, hall_noise_seed + 100 + s);
+
+    thetaGyro = integrate_gyro_angle(data.theta_meas(1), gyro, hall_ts_sim_s);
+    thetaComp = complementary_hall_gyro_filter(data.theta_meas, gyro, hall_ts_sim_s, hall_comp_alpha);
+    [thetaKalman, gyroBiasHat] = kalman_hall_gyro_filter( ...
+        data.theta_meas, gyro, hall_ts_sim_s, ...
+        hall_kalman_q_angle, hall_kalman_q_bias, hall_kalman_r_hall);
+
+    thetaGyro = align_angle(thetaGyro, data.theta_true);
+    thetaComp = align_angle(thetaComp, data.theta_true);
+    thetaKalman = align_angle(thetaKalman, data.theta_true);
+
+    fusionEstimates = {
+        data.estimates{1};
+        data.estimates{3};
+        data.estimates{4};
+        thetaGyro;
+        thetaComp;
+        thetaKalman
+    };
+
+    fusionErrors = cell(size(fusionEstimates));
+    for m = 1:numel(fusionEstimates)
+        fusionErrors{m} = wrap_pi(fusionEstimates{m} - data.theta_true);
+        errDeg = rad2deg(fusionErrors{m}(dyn_metric_idx));
+        newRow = table( ...
+            data.id, data.label, fusionMethodLabels(m), ...
+            max(abs(errDeg)), rms_local(errDeg), ...
+            'VariableNames', {'scenario_id', 'scenario_label', 'method', 'max_error_deg', 'rms_error_deg'});
+        fusionMetrics = [fusionMetrics; newRow]; %#ok<AGROW>
+    end
+
+    fusionData(s).id = data.id;
+    fusionData(s).label = data.label;
+    fusionData(s).theta_true = data.theta_true;
+    fusionData(s).omega_true = data.omega_true;
+    fusionData(s).gyro = gyro;
+    fusionData(s).estimates = fusionEstimates;
+    fusionData(s).errors = fusionErrors;
+    fusionData(s).gyro_bias_hat = gyroBiasHat;
+end
+
+fusionCsvPath = fullfile(figDir, 'dual_hall_gyro_fusion_metrics.csv');
+writetable(fusionMetrics, fusionCsvPath);
+prepend_utf8_bom(fusionCsvPath);
+
+fusionFig = figure('Name', 'Dual Hall Gyro Complementary Kalman Fusion Validation', ...
+    'Color', 'w', 'Position', [40 40 1400 860]);
+tiledlayout(fusionFig, 3, 3, 'TileSpacing', 'compact', 'Padding', 'compact');
+
+for s = 1:numel(fusionData)
+    data = fusionData(s);
+
+    nexttile
+    plot(dyn_t(dyn_plot_idx), data.omega_true(dyn_plot_idx)*60/(2*pi), ...
+        'k', 'LineWidth', 1.1)
+    hold on
+    plot(dyn_t(dyn_plot_idx), data.gyro(dyn_plot_idx)*60/(2*pi), ...
+        'Color', [0.60 0.60 0.60], 'LineWidth', 0.7)
+    grid on
+    xlabel('Time / s')
+    ylabel('Speed / rpm')
+    title(sprintf('(%c1) %s true speed and gyro', char('a' + s - 1), data.label))
+    if s == 1
+        legend('true', 'gyro meas.', 'Location', 'southoutside', 'NumColumns', 2)
+    end
+
+    nexttile
+    hold on
+    for m = 1:numel(fusionMethodLabels)
+        plot(dyn_t(dyn_plot_idx), rad2deg(data.errors{m}(dyn_plot_idx)), ...
+            'Color', fusionLineColors(m,:), 'LineWidth', 0.9)
+    end
+    grid on
+    xlabel('Time / s')
+    ylabel('Angle error / deg')
+    title(sprintf('(%c2) Hall/Gyro fusion angle error', char('a' + s - 1)))
+    if s == 1
+        legend(fusionMethodLabels, 'Location', 'southoutside', 'NumColumns', 3)
+    end
+
+    nexttile
+    plot(dyn_t(dyn_plot_idx), rad2deg(data.gyro_bias_hat(dyn_plot_idx)), ...
+        'Color', [0.00 0.00 0.00], 'LineWidth', 1.0)
+    hold on
+    plot(dyn_t(dyn_plot_idx), rad2deg( ...
+        hall_gyro_bias_rad_s + hall_gyro_bias_drift_rad_s2*dyn_t(dyn_plot_idx)), ...
+        '--', 'Color', [0.70 0.10 0.10], 'LineWidth', 1.0)
+    grid on
+    xlabel('Time / s')
+    ylabel('Gyro bias / deg*s^{-1}')
+    title(sprintf('(%c3) Kalman gyro-bias estimate', char('a' + s - 1)))
+    if s == 1
+        legend('estimated', 'injected', 'Location', 'southoutside', 'NumColumns', 2)
+    end
+end
+
+axs = findall(fusionFig, 'Type', 'Axes');
+for ax = reshape(axs, 1, [])
+    try
+        ax.Toolbar.Visible = 'off';
+    catch
+    end
+    try
+        disableDefaultInteractivity(ax);
+    catch
+    end
+end
+
+fusionPngPath = fullfile(figDir, 'dual_hall_gyro_fusion_validation.png');
+exportgraphics(fusionFig, fusionPngPath, 'Resolution', 220);
+
+fusionMetricFig = figure('Name', 'Dual Hall Gyro Fusion Metrics', ...
+    'Color', 'w', 'Position', [120 120 1150 560]);
+tiledlayout(fusionMetricFig, 1, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
+
+fusionMaxMat = zeros(numel(dynScenarioLabels), numel(fusionMethodLabels));
+fusionRmsMat = zeros(numel(dynScenarioLabels), numel(fusionMethodLabels));
+for s = 1:numel(dynScenarioLabels)
+    for m = 1:numel(fusionMethodLabels)
+        row = fusionMetrics.scenario_label == dynScenarioLabels(s) & ...
+            fusionMetrics.method == fusionMethodLabels(m);
+        fusionMaxMat(s,m) = fusionMetrics.max_error_deg(row);
+        fusionRmsMat(s,m) = fusionMetrics.rms_error_deg(row);
+    end
+end
+
+nexttile
+bar(fusionMaxMat)
+grid on
+set(gca, 'XTickLabel', dynScenarioLabels)
+xtickangle(15)
+ylabel('Max angle error / deg')
+title('(a) Maximum error: Hall-only versus Hall/Gyro fusion')
+legend(fusionMethodLabels, 'Location', 'northoutside', 'NumColumns', 3)
+
+nexttile
+bar(fusionRmsMat)
+grid on
+set(gca, 'XTickLabel', dynScenarioLabels)
+xtickangle(15)
+ylabel('RMS angle error / deg')
+title('(b) RMS error: Hall-only versus Hall/Gyro fusion')
+legend(fusionMethodLabels, 'Location', 'northoutside', 'NumColumns', 3)
+
+fusionMetricsPngPath = fullfile(figDir, 'dual_hall_gyro_fusion_metrics.png');
+exportgraphics(fusionMetricFig, fusionMetricsPngPath, 'Resolution', 220);
+
+fprintf('\nDual-Hall + Gyro fusion validation\n');
+fprintf('Gyro noise RMS: %.4g rad/s, bias: %.4g rad/s, drift: %.4g rad/s^2\n', ...
+    hall_gyro_noise_rms_rad_s, hall_gyro_bias_rad_s, hall_gyro_bias_drift_rad_s2);
+fprintf('Complementary alpha: %.4g\n', hall_comp_alpha);
+fprintf('Kalman Q angle: %.4g, Q bias: %.4g, R Hall: %.4g\n', ...
+    hall_kalman_q_angle, hall_kalman_q_bias, hall_kalman_r_hall);
+fprintf('\nHall/Gyro fusion metrics:\n');
+for k = 1:height(fusionMetrics)
+    fprintf('  %-17s %-16s max %.4f deg, rms %.4f deg\n', ...
+        fusionMetrics.scenario_label(k), fusionMetrics.method(k), ...
+        fusionMetrics.max_error_deg(k), fusionMetrics.rms_error_deg(k));
+end
+fprintf('\nSaved Hall/Gyro fusion figures:\n%s\n%s\n', fusionPngPath, fusionMetricsPngPath);
+fprintf('Saved Hall/Gyro fusion metrics:\n%s\n', fusionCsvPath);
+
+%% Low-speed sweep detection-accuracy validation
+% 该段对应“检测精度约为 <= ±0.005 deg @1sigma”的准静态工况：
+% 低速扫角、无冲击、无大加减速，统计角度误差的标准差 sigma。
+low_t = (0:hall_low_speed_ts_s:hall_low_speed_t_stop_s).';
+low_plot_idx = low_t <= min(5, hall_low_speed_t_stop_s);
+low_metric_idx = low_t >= hall_low_speed_metric_start_s;
+
+lowMethodLabels = fusionMethodLabels;
+lowMetrics = table('Size', [0 7], ...
+    'VariableTypes', {'double', 'string', 'double', 'double', 'double', 'double', 'logical'}, ...
+    'VariableNames', {'sweep_rpm', 'method', 'mean_error_deg', 'sigma_1deg', ...
+    'rms_error_deg', 'max_abs_error_deg', 'pass_1sigma'});
+lowData = struct([]);
+
+for s = 1:numel(hall_low_speed_sweep_rpm)
+    sweepRpm = hall_low_speed_sweep_rpm(s);
+    omegaTrue = sweepRpm*2*pi/60*ones(size(low_t));
+    thetaTrue = cumtrapz(low_t, omegaTrue);
+    thetaMagLow = P.pole_pairs*thetaTrue + hall_theta0_rad;
+
+    [hall_s_low_clean_v, hall_c_low_clean_v] = generate_clean_hall_signal(thetaMagLow, P);
+    rng(hall_noise_seed + 300 + s);
+    hall_s_low_noisy_adc_v = adc_quantize( ...
+        hall_s_low_clean_v + hall_noise_rms_v*randn(size(low_t)), P);
+    hall_c_low_noisy_adc_v = adc_quantize( ...
+        hall_c_low_clean_v + hall_noise_rms_v*randn(size(low_t)), P);
+
+    resultLow = apply_compensation_chain( ...
+        hall_s_low_noisy_adc_v, hall_c_low_noisy_adc_v, thetaMagLow, cal, P);
+    thetaHall = align_angle((resultLow.theta_anglecomp - hall_theta0_rad)/P.pole_pairs, thetaTrue);
+
+    [thetaAbLow, ~] = alpha_beta_filter(thetaHall, hall_low_speed_ts_s, hall_ab_alpha, hall_ab_beta);
+    [thetaEsoLow, ~, ~] = discrete_eso_filter( ...
+        thetaHall, hall_low_speed_ts_s, hall_eso_beta1, hall_eso_beta2, hall_eso_beta3);
+
+    gyroLow = make_gyro_measurement( ...
+        omegaTrue, low_t, ...
+        hall_gyro_bias_rad_s, hall_gyro_bias_drift_rad_s2, ...
+        hall_gyro_noise_rms_rad_s, hall_noise_seed + 400 + s);
+    thetaGyroLow = integrate_gyro_angle(thetaHall(1), gyroLow, hall_low_speed_ts_s);
+    thetaCompLow = complementary_hall_gyro_filter(thetaHall, gyroLow, hall_low_speed_ts_s, hall_comp_alpha);
+    [thetaKalmanLow, gyroBiasHatLow] = kalman_hall_gyro_filter( ...
+        thetaHall, gyroLow, hall_low_speed_ts_s, ...
+        hall_kalman_q_angle, hall_kalman_q_bias, hall_kalman_r_hall);
+
+    thetaAbLow = align_angle(thetaAbLow, thetaTrue);
+    thetaEsoLow = align_angle(thetaEsoLow, thetaTrue);
+    thetaGyroLow = align_angle(thetaGyroLow, thetaTrue);
+    thetaCompLow = align_angle(thetaCompLow, thetaTrue);
+    thetaKalmanLow = align_angle(thetaKalmanLow, thetaTrue);
+
+    lowEstimates = {
+        thetaHall;
+        thetaAbLow;
+        thetaEsoLow;
+        thetaGyroLow;
+        thetaCompLow;
+        thetaKalmanLow
+    };
+
+    lowErrors = cell(size(lowEstimates));
+    for m = 1:numel(lowMethodLabels)
+        lowErrors{m} = wrap_pi(lowEstimates{m} - thetaTrue);
+        errDeg = rad2deg(lowErrors{m}(low_metric_idx));
+        sigmaDeg = std(errDeg);
+        newRow = table( ...
+            sweepRpm, lowMethodLabels(m), mean(errDeg), sigmaDeg, ...
+            rms_local(errDeg), max(abs(errDeg)), sigmaDeg <= hall_detection_sigma_target_deg, ...
+            'VariableNames', {'sweep_rpm', 'method', 'mean_error_deg', 'sigma_1deg', ...
+            'rms_error_deg', 'max_abs_error_deg', 'pass_1sigma'});
+        lowMetrics = [lowMetrics; newRow]; %#ok<AGROW>
+    end
+
+    lowData(s).rpm = sweepRpm;
+    lowData(s).theta_true = thetaTrue;
+    lowData(s).omega_true = omegaTrue;
+    lowData(s).hall_s_clean_v = hall_s_low_clean_v;
+    lowData(s).hall_s_noisy_adc_v = hall_s_low_noisy_adc_v;
+    lowData(s).gyro = gyroLow;
+    lowData(s).errors = lowErrors;
+    lowData(s).gyro_bias_hat = gyroBiasHatLow;
+end
+
+lowCsvPath = fullfile(figDir, 'dual_hall_low_speed_detection_metrics.csv');
+writetable(lowMetrics, lowCsvPath);
+prepend_utf8_bom(lowCsvPath);
+
+lowPlotCase = min(2, numel(lowData));
+lowFig = figure('Name', 'Dual Hall Low-Speed Detection Accuracy Validation', ...
+    'Color', 'w', 'Position', [60 60 1350 780]);
+tiledlayout(lowFig, 2, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
+
+nexttile
+plot(low_t(low_plot_idx), lowData(lowPlotCase).hall_s_clean_v(low_plot_idx), ...
+    'k', 'LineWidth', 1.0)
+hold on
+plot(low_t(low_plot_idx), lowData(lowPlotCase).hall_s_noisy_adc_v(low_plot_idx), ...
+    'Color', [0.80 0.10 0.10], 'LineWidth', 0.75)
+grid on
+xlabel('Time / s')
+ylabel('Hall voltage / V')
+title(sprintf('(a) %.1f rpm low-speed Hall voltage', lowData(lowPlotCase).rpm))
+legend('clean', 'ADC + noise', 'Location', 'southoutside', 'NumColumns', 2)
+
+nexttile
+hold on
+for m = 1:numel(lowMethodLabels)
+    plot(low_t(low_plot_idx), rad2deg(lowData(lowPlotCase).errors{m}(low_plot_idx)), ...
+        'Color', fusionLineColors(m,:), 'LineWidth', 0.9)
+end
+yline(hall_detection_sigma_target_deg, '--', 'Color', [0.3 0.3 0.3], 'LineWidth', 0.9)
+yline(-hall_detection_sigma_target_deg, '--', 'Color', [0.3 0.3 0.3], 'LineWidth', 0.9)
+grid on
+xlabel('Time / s')
+ylabel('Angle error / deg')
+title(sprintf('(b) %.1f rpm angle error, target band shown', lowData(lowPlotCase).rpm))
+legend([lowMethodLabels; "±0.005 deg"], 'Location', 'southoutside', 'NumColumns', 3)
+
+lowSigmaMat = zeros(numel(hall_low_speed_sweep_rpm), numel(lowMethodLabels));
+lowMaxMat = zeros(numel(hall_low_speed_sweep_rpm), numel(lowMethodLabels));
+for s = 1:numel(hall_low_speed_sweep_rpm)
+    for m = 1:numel(lowMethodLabels)
+        row = lowMetrics.sweep_rpm == hall_low_speed_sweep_rpm(s) & ...
+            lowMetrics.method == lowMethodLabels(m);
+        lowSigmaMat(s,m) = lowMetrics.sigma_1deg(row);
+        lowMaxMat(s,m) = lowMetrics.max_abs_error_deg(row);
+    end
+end
+
+nexttile
+bar(lowSigmaMat)
+hold on
+yline(hall_detection_sigma_target_deg, '--r', 'LineWidth', 1.2)
+grid on
+set(gca, 'XTickLabel', string(hall_low_speed_sweep_rpm) + " rpm")
+xtickangle(15)
+ylabel('1\sigma / deg')
+title('(c) Detection precision: standard deviation')
+legend([lowMethodLabels; "target"], 'Location', 'northoutside', 'NumColumns', 3)
+
+nexttile
+bar(lowMaxMat)
+grid on
+set(gca, 'XTickLabel', string(hall_low_speed_sweep_rpm) + " rpm")
+xtickangle(15)
+ylabel('Max abs error / deg')
+title('(d) Maximum absolute error during low-speed sweep')
+legend(lowMethodLabels, 'Location', 'northoutside', 'NumColumns', 3)
+
+axs = findall(lowFig, 'Type', 'Axes');
+for ax = reshape(axs, 1, [])
+    try
+        ax.Toolbar.Visible = 'off';
+    catch
+    end
+    try
+        disableDefaultInteractivity(ax);
+    catch
+    end
+end
+
+lowPngPath = fullfile(figDir, 'dual_hall_low_speed_detection_validation.png');
+exportgraphics(lowFig, lowPngPath, 'Resolution', 220);
+
+fprintf('\nDual-Hall low-speed detection-accuracy validation\n');
+fprintf('Detection target: sigma <= %.4f deg @1sigma\n', hall_detection_sigma_target_deg);
+fprintf('Sweep speeds: %s rpm\n', mat2str(hall_low_speed_sweep_rpm));
+fprintf('\nLow-speed detection metrics:\n');
+for k = 1:height(lowMetrics)
+    passText = "NO";
+    if lowMetrics.pass_1sigma(k)
+        passText = "YES";
+    end
+    fprintf('  %-5.1f rpm %-16s mean %+8.4f deg, sigma %.4f deg, rms %.4f deg, max %.4f deg, pass %s\n', ...
+        lowMetrics.sweep_rpm(k), lowMetrics.method(k), lowMetrics.mean_error_deg(k), ...
+        lowMetrics.sigma_1deg(k), lowMetrics.rms_error_deg(k), lowMetrics.max_abs_error_deg(k), passText);
+end
+fprintf('\nSaved low-speed detection figure:\n%s\n', lowPngPath);
+fprintf('Saved low-speed detection metrics:\n%s\n', lowCsvPath);
+
 %% 局部函数
 function P = collect_hall_params
 P.offset_s_actual_v = evalin('base', 'hall_offset_s_actual_v');
@@ -718,6 +1092,73 @@ thetaMeas = theta + residual/polePairs + noise;
 data.theta_true = theta;
 data.omega_true = omega;
 data.theta_meas = thetaMeas;
+end
+
+function omega_gyro = make_gyro_measurement(omega_true, t, bias, biasDrift, noiseRms, seed)
+% 生成陀螺测量角速度：真实角速度 + 固定零偏 + 慢漂移 + 白噪声。
+rng(seed);
+omega_gyro = omega_true(:) + bias + biasDrift*(t(:) - t(1)) + noiseRms*randn(size(t(:)));
+end
+
+function theta_gyro = integrate_gyro_angle(theta0, omega_gyro, Ts)
+% 只积分 gyro，短时间动态好，但只要存在零偏就会长期漂移。
+omega_gyro = omega_gyro(:);
+theta_gyro = zeros(size(omega_gyro));
+theta_gyro(1) = theta0;
+for idx = 2:numel(omega_gyro)
+    theta_gyro(idx) = theta_gyro(idx-1) + Ts*omega_gyro(idx);
+end
+end
+
+function theta_fused = complementary_hall_gyro_filter(theta_hall, omega_gyro, Ts, alpha)
+% 互补滤波：gyro 积分负责短时预测，Hall 角度负责低频拉回漂移。
+theta_hall = theta_hall(:);
+omega_gyro = omega_gyro(:);
+theta_fused = zeros(size(theta_hall));
+theta_fused(1) = theta_hall(1);
+for idx = 2:numel(theta_hall)
+    theta_pred = theta_fused(idx-1) + Ts*omega_gyro(idx);
+    theta_fused(idx) = alpha*theta_pred + (1 - alpha)*theta_hall(idx);
+end
+end
+
+function [theta_hat, bias_hat] = kalman_hall_gyro_filter(theta_hall, omega_gyro, Ts, qTheta, qBias, rHall)
+% 二状态 Hall/Gyro Kalman：状态为 [角度; gyro 零偏]。
+% 预测：theta[k+1] = theta[k] + Ts*(omega_gyro - bias)
+% 修正：用 Hall 解角测量 theta_hall 修正角度和零偏。
+theta_hall = theta_hall(:);
+omega_gyro = omega_gyro(:);
+
+n = numel(theta_hall);
+theta_hat = zeros(n, 1);
+bias_hat = zeros(n, 1);
+
+x = [theta_hall(1); 0];
+Pcov = diag([rHall, deg2rad(0.5)^2]);
+Q = diag([qTheta, qBias]);
+H = [1 0];
+R = rHall;
+
+theta_hat(1) = x(1);
+bias_hat(1) = x(2);
+
+for idx = 2:n
+    F = [1, -Ts; 0, 1];
+    B = [Ts; 0];
+
+    xPred = F*x + B*omega_gyro(idx);
+    PPred = F*Pcov*F' + Q;
+
+    innovation = theta_hall(idx) - H*xPred;
+    S = H*PPred*H' + R;
+    K = PPred*H'/S;
+
+    x = xPred + K*innovation;
+    Pcov = (eye(2) - K*H)*PPred;
+
+    theta_hat(idx) = x(1);
+    bias_hat(idx) = x(2);
+end
 end
 
 function y = smooth_step(t, t0, t1)

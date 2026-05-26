@@ -1,0 +1,19 @@
+﻿scenario_id,scenario_label,method,max_error_deg,rms_error_deg
+variable_speed,Variable speed,Hall raw,0.228702301165393,0.0603708523837475
+variable_speed,Variable speed,Alpha-beta,0.0987059874944068,0.0261961158647151
+variable_speed,Variable speed,Discrete ESO,0.0787341532617974,0.021020146112514
+variable_speed,Variable speed,Gyro integration,0.476115398402898,0.294358941962188
+variable_speed,Variable speed,Complementary,0.0194065529380992,0.00679040402380291
+variable_speed,Variable speed,Kalman,0.0904408220661154,0.0237721276573892
+impact,Impact vibration,Hall raw,0.260426811575003,0.0606060928564502
+impact,Impact vibration,Alpha-beta,0.0947188630615261,0.0254463342371197
+impact,Impact vibration,Discrete ESO,0.16172281146716,0.0212601455472344
+impact,Impact vibration,Gyro integration,0.261266229395397,0.131227271082999
+impact,Impact vibration,Complementary,0.0166131988348598,0.00603613270394151
+impact,Impact vibration,Kalman,0.0839920253116213,0.0230128527102159
+load_disturbance,Load disturbance,Hall raw,0.240146648771989,0.0610668415370215
+load_disturbance,Load disturbance,Alpha-beta,0.09736640525148,0.0256723975275782
+load_disturbance,Load disturbance,Discrete ESO,0.0729159953692897,0.02013415628372
+load_disturbance,Load disturbance,Gyro integration,0.414665196356885,0.231849566366985
+load_disturbance,Load disturbance,Complementary,0.015767962575973,0.00618486242076059
+load_disturbance,Load disturbance,Kalman,0.0901488320204532,0.0233437181396212

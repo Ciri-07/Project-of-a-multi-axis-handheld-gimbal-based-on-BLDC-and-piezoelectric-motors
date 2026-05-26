@@ -11,7 +11,7 @@
 init_dual_hall_harmonic_params;
 
 hall_noise_seed = 1808;          % 随机种子，保证每次仿真可复现
-hall_noise_rms_v = 1.0e-2;       % V，单通道白噪声 RMS 值
+hall_noise_rms_v = 5.0e-4;       % V，单通道白噪声 RMS 值
 
 hall_adc_enable = true;          % 是否启用 ADC 量化
 hall_adc_lsb_v = hall_vref_v/(2^hall_adc_bits - 1);  % V，ADC 最低有效位
@@ -32,5 +32,23 @@ hall_eso_omega_o_rad_s = 2*pi*hall_eso_bandwidth_hz;  % rad/s，ESO 观测器带
 hall_eso_beta1 = 3*hall_eso_omega_o_rad_s;            % ESO 角度误差反馈增益
 hall_eso_beta2 = 3*hall_eso_omega_o_rad_s^2;          % ESO 角速度误差反馈增益
 hall_eso_beta3 = hall_eso_omega_o_rad_s^3;            % ESO 总扰动误差反馈增益
+
+% Hall + Gyro 融合参数。Gyro 提供高频角速度，Hall 提供低频/长期不漂的角度基准。
+% 这里先用典型 MEMS 陀螺误差进行仿真，后续拿到实测 IMU 数据后可直接替换。
+hall_gyro_noise_rms_rad_s = deg2rad(0.8);       % rad/s，陀螺角速度白噪声 RMS
+hall_gyro_bias_rad_s = deg2rad(0.18);           % rad/s，陀螺固定零偏
+hall_gyro_bias_drift_rad_s2 = deg2rad(0.02);    % rad/s^2，陀螺零偏慢漂移斜率
+
+hall_comp_alpha = 0.995;                        % 互补滤波权重，越接近 1 越相信 gyro 短时积分
+hall_kalman_q_angle = deg2rad(0.02)^2;          % Kalman 角度过程噪声方差
+hall_kalman_q_bias = deg2rad(0.01)^2;           % Kalman 陀螺零偏过程噪声方差
+hall_kalman_r_hall = deg2rad(0.08)^2;           % Kalman Hall 角度测量噪声方差
+
+% 低速扫角检测精度验证参数。该工况用于对应“≤±0.005° @1σ”的准静态检测指标。
+hall_low_speed_sweep_rpm = [0.5 1 5];           % rpm，低速扫角速度
+hall_low_speed_ts_s = 2e-4;                     % s，低速扫角采样时间，等效 5 kHz
+hall_low_speed_t_stop_s = 20;                   % s，低速扫角仿真时长
+hall_low_speed_metric_start_s = 1.0;            % s，避开滤波初始过渡后的统计起点
+hall_detection_sigma_target_deg = 0.005;        % deg，检测精度目标，约等于 ±0.005° @1σ
 
 hall_noise_fig_window_s = 0.5;   % s，结果图显示窗口
