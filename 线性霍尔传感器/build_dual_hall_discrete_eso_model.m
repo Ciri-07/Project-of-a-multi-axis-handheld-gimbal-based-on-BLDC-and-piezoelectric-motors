@@ -202,7 +202,7 @@ eso_angle_lpf_alpha = exp(-eso_Ts/eso_angle_lpf_tau_s);
 eso_ab_alpha = hall_ab_alpha;
 eso_ab_beta = hall_ab_beta;
 
-eso_bandwidth_hz = 80;
+eso_bandwidth_hz = hall_eso_bandwidth_hz;
 eso_omega_o = 2*pi*eso_bandwidth_hz;
 eso_beta1 = 3*eso_omega_o;
 eso_beta2 = 3*eso_omega_o^2;

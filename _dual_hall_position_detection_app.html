@@ -1,0 +1,2154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>双线性 Hall 高精度位置检测与补偿软件</title>
+  <style>
+    :root {
+      --bg: #f5fbff;
+      --panel: #ffffff;
+      --panel-2: #edf7ff;
+      --line: #d6e9f7;
+      --text: #19384d;
+      --muted: #60788a;
+      --blue: #57a9df;
+      --blue-dark: #1672ad;
+      --blue-soft: #dff2ff;
+      --green: #2ba86a;
+      --red: #d64545;
+      --orange: #d9812b;
+      --shadow: 0 18px 42px rgba(38, 118, 166, 0.12);
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
+      background:
+        linear-gradient(180deg, rgba(230, 246, 255, 0.95), rgba(248, 252, 255, 0.95)),
+        radial-gradient(circle at 20% 0%, rgba(111, 189, 235, 0.18), transparent 34%);
+      color: var(--text);
+    }
+
+    .app-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: center;
+      padding: 14px 22px;
+      background: rgba(255, 255, 255, 0.92);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(12px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #dff2ff, #8fd0f5);
+      color: var(--blue-dark);
+      font-weight: 800;
+      border: 1px solid #9dd8f7;
+      flex: none;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: 0;
+      line-height: 1.35;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .subtitle {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font: inherit;
+      cursor: pointer;
+      transition: 0.16s ease;
+      white-space: nowrap;
+    }
+
+    button:hover {
+      border-color: #9bd4f3;
+      background: #f2faff;
+      transform: translateY(-1px);
+    }
+
+    button.primary {
+      background: var(--blue-dark);
+      color: #fff;
+      border-color: var(--blue-dark);
+      box-shadow: 0 8px 22px rgba(22, 114, 173, 0.22);
+    }
+
+    button.primary:hover {
+      background: #0f649b;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(310px, 360px) 1fr;
+      gap: 16px;
+      padding: 16px;
+    }
+
+    aside {
+      min-width: 0;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .control-panel {
+      padding: 14px;
+      display: grid;
+      gap: 14px;
+      max-height: calc(100vh - 86px);
+      overflow: auto;
+    }
+
+    .section {
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .section:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .section h2 {
+      margin: 0;
+      font-size: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: var(--blue-soft);
+      color: var(--blue-dark);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+    }
+
+    label.field {
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      min-width: 0;
+    }
+
+    input, select {
+      width: 100%;
+      border: 1px solid #c9e2f2;
+      border-radius: 6px;
+      padding: 7px 8px;
+      background: #fbfdff;
+      color: var(--text);
+      font: inherit;
+      min-height: 34px;
+    }
+
+    input:focus, select:focus {
+      outline: 2px solid rgba(87, 169, 223, 0.22);
+      border-color: var(--blue);
+    }
+
+    .check-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .check-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 32px;
+      padding: 5px 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #f9fdff;
+      font-size: 13px;
+    }
+
+    .check-item input {
+      width: 16px;
+      height: 16px;
+      min-height: 0;
+    }
+
+    .range-line {
+      display: grid;
+      grid-template-columns: 1fr 56px;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .range-line.wide {
+      grid-template-columns: 1fr 74px;
+    }
+
+    input[type="range"] {
+      padding: 0;
+      accent-color: var(--blue-dark);
+    }
+
+    .workspace {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 14px;
+    }
+
+    .summary-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric {
+      padding: 13px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      min-width: 0;
+    }
+
+    .metric .name {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric .value {
+      margin-top: 5px;
+      font-size: 22px;
+      font-weight: 750;
+      color: var(--blue-dark);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .metric .note {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      padding: 6px;
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      width: fit-content;
+      max-width: 100%;
+      overflow: auto;
+    }
+
+    .tab {
+      border: 0;
+      background: transparent;
+      padding: 8px 12px;
+      border-radius: 5px;
+      color: var(--muted);
+      box-shadow: none;
+    }
+
+    .tab.active {
+      background: var(--blue-dark);
+      color: #fff;
+    }
+
+    .view {
+      display: none;
+      min-width: 0;
+    }
+
+    .view.active {
+      display: block;
+    }
+
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .chart-card.wide {
+      grid-column: 1 / -1;
+    }
+
+    .principle-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .principle-card {
+      padding: 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      min-width: 0;
+    }
+
+    .principle-card h3 {
+      margin: 0 0 8px;
+      color: var(--blue-dark);
+      font-size: 15px;
+    }
+
+    .principle-card p {
+      margin: 0 0 8px;
+      color: var(--muted);
+      line-height: 1.65;
+      font-size: 13px;
+    }
+
+    .formula {
+      margin: 8px 0;
+      padding: 10px 12px;
+      background: #f4fbff;
+      border: 1px solid #d7ecf8;
+      border-left: 4px solid var(--blue);
+      border-radius: 6px;
+      color: #19384d;
+      font-family: "Cambria Math", "Times New Roman", serif;
+      font-size: 15px;
+      line-height: 1.55;
+      overflow-x: auto;
+    }
+
+    .mini-list {
+      margin: 8px 0 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .chart-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 12px;
+      min-width: 0;
+    }
+
+    .chart-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .chart-title {
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .swatch {
+      width: 18px;
+      height: 3px;
+      border-radius: 3px;
+      background: currentColor;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 280px;
+      background: #fff;
+      border: 1px solid #e2eef6;
+      border-radius: 6px;
+    }
+
+    canvas.model-canvas {
+      height: 340px;
+      background: linear-gradient(180deg, #fafdff 0%, #edf8ff 100%);
+    }
+
+    .metrics-viz-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 720px;
+      background: #fff;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e6f1f8;
+      text-align: left;
+      font-size: 13px;
+    }
+
+    th {
+      background: #e8f6ff;
+      color: var(--blue-dark);
+      font-weight: 750;
+      position: sticky;
+      top: 0;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .algo-flow {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(110px, 1fr));
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .flow-step {
+      position: relative;
+      min-height: 76px;
+      padding: 12px;
+      background: #ffffff;
+      border: 1px solid #bde0f5;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .flow-step::after {
+      content: "";
+      position: absolute;
+      right: -10px;
+      top: 50%;
+      width: 10px;
+      height: 2px;
+      background: #9ccfe8;
+    }
+
+    .flow-step:last-child::after {
+      display: none;
+    }
+
+    .step-no {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--blue-dark);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .step-name {
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .step-note {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    .report-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 14px;
+    }
+
+    .report-box {
+      padding: 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .report-box h3 {
+      margin: 0 0 10px;
+      font-size: 15px;
+    }
+
+    .report-box p {
+      margin: 0 0 9px;
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 13px;
+    }
+
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 20;
+      padding: 12px 14px;
+      border-radius: 6px;
+      background: #12384f;
+      color: #fff;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+      opacity: 0;
+      transform: translateY(12px);
+      pointer-events: none;
+      transition: 0.2s ease;
+      max-width: min(420px, calc(100vw - 36px));
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media (max-width: 1180px) {
+      main { grid-template-columns: 1fr; }
+      .control-panel { max-height: none; }
+      .summary-strip { grid-template-columns: repeat(2, 1fr); }
+      .algo-flow { grid-template-columns: repeat(3, 1fr); }
+      .metrics-viz-grid { grid-template-columns: 1fr; }
+      .principle-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 760px) {
+      header { grid-template-columns: 1fr; }
+      .toolbar { justify-content: flex-start; }
+      .chart-grid, .report-grid, .summary-strip, .metrics-viz-grid, .principle-grid { grid-template-columns: 1fr; }
+      .field-grid, .check-list { grid-template-columns: 1fr; }
+      .algo-flow { grid-template-columns: 1fr; }
+      .flow-step::after { display: none; }
+      h1 { white-space: normal; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header>
+      <div class="brand">
+        <div class="brand-mark">H</div>
+        <div>
+          <h1>双线性 Hall 高精度位置检测与补偿软件</h1>
+          <div class="subtitle">参数配置 · 信号生成 · 误差注入 · 补偿算法 · 工况仿真 · 结果导出</div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="primary" id="runBtn">运行仿真</button>
+        <button id="resetBtn">恢复默认</button>
+        <button id="exportPngBtn">导出 PNG</button>
+        <button id="exportCsvBtn">导出 CSV</button>
+        <button id="exportParamBtn">导出参数</button>
+      </div>
+    </header>
+
+    <main>
+      <aside>
+        <div class="panel control-panel">
+          <section class="section">
+            <h2>参数配置 <span class="tag">Hall / ADC</span></h2>
+            <div class="field-grid">
+              <label class="field">Hall 极对数 p
+                <input id="polePairs" type="number" min="1" max="32" step="1" value="6">
+              </label>
+              <label class="field">机械转速 / rpm
+                <div class="range-line wide">
+                  <input id="speedRpmSlider" type="range" min="1" max="3000" step="1" value="100">
+                  <input id="speedRpm" type="number" min="0.1" max="3000" step="1" value="100">
+                </div>
+              </label>
+              <label class="field">仿真时长 / s
+                <input id="simTime" type="number" min="0.1" max="5" step="0.1" value="0.5">
+              </label>
+              <label class="field">采样频率 / Hz
+                <input id="sampleRate" type="number" min="500" max="50000" step="500" value="5000">
+              </label>
+              <label class="field">ADC 位数
+                <input id="adcBits" type="number" min="8" max="24" step="1" value="16">
+              </label>
+              <label class="field">参考电压 / V
+                <input id="vref" type="number" min="1" max="5" step="0.1" value="3.3">
+              </label>
+              <label class="field">Hall 安装夹角 / deg
+                <div class="range-line wide">
+                  <input id="mountAngleDegSlider" type="range" min="60" max="120" step="0.5" value="90">
+                  <input id="mountAngleDeg" type="number" min="60" max="120" step="0.5" value="90">
+                </div>
+              </label>
+            </div>
+          </section>
+
+          <section class="section">
+            <h2>误差注入 <span class="tag">可开关</span></h2>
+            <div class="check-list">
+              <label class="check-item"><input id="enableOffset" type="checkbox" checked> 零偏</label>
+              <label class="check-item"><input id="enableAmp" type="checkbox" checked> 幅值不一致</label>
+              <label class="check-item"><input id="enablePhase" type="checkbox" checked> 相位不正交</label>
+              <label class="check-item"><input id="enableHarm" type="checkbox" checked> 谐波</label>
+              <label class="check-item"><input id="enableNoise" type="checkbox" checked> 白噪声</label>
+              <label class="check-item"><input id="enableAdc" type="checkbox" checked> ADC 量化</label>
+            </div>
+            <div class="field-grid">
+              <label class="field">正弦零偏误差 / V
+                <input id="offsetS" type="number" step="0.01" value="0.05">
+              </label>
+              <label class="field">余弦零偏误差 / V
+                <input id="offsetC" type="number" step="0.01" value="-0.08">
+              </label>
+              <label class="field">正弦幅值 As / V
+                <input id="ampS" type="number" min="0.1" step="0.01" value="1.00">
+              </label>
+              <label class="field">余弦幅值 Ac / V
+                <input id="ampC" type="number" min="0.1" step="0.01" value="0.85">
+              </label>
+              <label class="field">相位误差 / deg
+                <div class="range-line wide">
+                  <input id="phaseDegSlider" type="range" min="-30" max="30" step="0.5" value="5">
+                  <input id="phaseDeg" type="number" step="0.5" value="5">
+                </div>
+              </label>
+              <label class="field">噪声 RMS / V
+                <div class="range-line wide">
+                  <input id="noiseRmsSlider" type="range" min="0" max="0.08" step="0.001" value="0.010">
+                  <input id="noiseRms" type="number" min="0" step="0.001" value="0.010">
+                </div>
+              </label>
+            </div>
+            <label class="field">谐波强度
+              <div class="range-line">
+                <input id="harmScale" type="range" min="0" max="2" step="0.05" value="1">
+                <input id="harmScaleValue" type="number" min="0" max="2" step="0.05" value="1">
+              </div>
+            </label>
+          </section>
+
+          <section class="section">
+            <h2>补偿算法 <span class="tag">实时解算</span></h2>
+            <div class="field-grid">
+              <label class="field">LPF 截止频率 / Hz
+                <div class="range-line wide">
+                  <input id="lpfHzSlider" type="range" min="1" max="2000" step="1" value="300">
+                  <input id="lpfHz" type="number" min="1" max="2000" step="10" value="300">
+                </div>
+              </label>
+              <label class="field">alpha-beta α
+                <div class="range-line wide">
+                  <input id="abAlphaSlider" type="range" min="0" max="1" step="0.01" value="0.22">
+                  <input id="abAlpha" type="number" min="0" max="1" step="0.01" value="0.22">
+                </div>
+              </label>
+              <label class="field">alpha-beta β
+                <div class="range-line wide">
+                  <input id="abBetaSlider" type="range" min="0" max="0.25" step="0.001" value="0.018">
+                  <input id="abBeta" type="number" min="0" max="1" step="0.001" value="0.018">
+                </div>
+              </label>
+              <label class="field">ESO 带宽 / Hz
+                <div class="range-line wide">
+                  <input id="esoHzSlider" type="range" min="5" max="500" step="5" value="60">
+                  <input id="esoHz" type="number" min="5" max="500" step="5" value="60">
+                </div>
+              </label>
+              <label class="field">信号补偿阶次
+                <input id="signalOrders" type="text" value="2,3,5,6">
+              </label>
+              <label class="field">角度补偿阶次
+                <input id="angleOrders" type="text" value="1,2,3,4,5,6,7,8">
+              </label>
+            </div>
+          </section>
+
+          <section class="section">
+            <h2>工况仿真 <span class="tag">云台场景</span></h2>
+            <label class="field">工况类型
+              <select id="scenario">
+                <option value="constant">恒速</option>
+                <option value="variable">变速</option>
+                <option value="impact">冲击</option>
+                <option value="load">负载扰动</option>
+              </select>
+            </label>
+            <div class="field-grid">
+              <label class="field">变速目标倍率
+                <div class="range-line wide">
+                  <input id="speedRatioSlider" type="range" min="0.2" max="5" step="0.1" value="1.8">
+                  <input id="speedRatio" type="number" min="0.2" max="5" step="0.1" value="1.8">
+                </div>
+              </label>
+              <label class="field">冲击幅值 / deg
+                <div class="range-line wide">
+                  <input id="impactDegSlider" type="range" min="0" max="20" step="0.5" value="2">
+                  <input id="impactDeg" type="number" min="0" max="20" step="0.5" value="2">
+                </div>
+              </label>
+              <label class="field">负载降速比例
+                <div class="range-line wide">
+                  <input id="loadDropSlider" type="range" min="0" max="0.8" step="0.05" value="0.25">
+                  <input id="loadDrop" type="number" min="0" max="0.8" step="0.05" value="0.25">
+                </div>
+              </label>
+              <label class="field">随机种子
+                <input id="seed" type="number" step="1" value="1808">
+              </label>
+            </div>
+          </section>
+        </div>
+      </aside>
+
+      <section class="workspace">
+        <div class="summary-strip">
+          <div class="metric">
+            <div class="name">原始解角最大误差</div>
+            <div class="value" id="rawMax">--</div>
+            <div class="note">atan2 直接解算</div>
+          </div>
+          <div class="metric">
+            <div class="name">基础补偿 RMS</div>
+            <div class="value" id="basicRms">--</div>
+            <div class="note">零偏 / 幅值 / 相位</div>
+          </div>
+          <div class="metric">
+            <div class="name">谐波补偿 RMS</div>
+            <div class="value" id="harmRms">--</div>
+            <div class="note">信号域 + 角度域</div>
+          </div>
+          <div class="metric">
+            <div class="name">ESO RMS</div>
+            <div class="value" id="esoRms">--</div>
+            <div class="note">最终角度估计</div>
+          </div>
+        </div>
+
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-view="dashboard">结果显示</button>
+          <button class="tab" data-view="metrics">误差指标</button>
+          <button class="tab" data-view="principle">原理介绍</button>
+          <button class="tab" data-view="flow">算法流程</button>
+          <button class="tab" data-view="report">报告导出</button>
+        </div>
+
+        <div id="dashboard" class="view active">
+          <div class="chart-grid">
+            <div class="chart-card wide">
+              <div class="chart-head">
+                <div class="chart-title">电机与双线性 Hall 安装三维示意</div>
+                <div class="legend">
+                  <span style="color:#57a9df"><i class="swatch"></i>中空磁钢 / 转子</span>
+                  <span style="color:#d9812b"><i class="swatch"></i>Hall S</span>
+                  <span style="color:#2ba86a"><i class="swatch"></i>Hall C，空间约 90°</span>
+                </div>
+              </div>
+              <canvas id="modelCanvas" class="model-canvas"></canvas>
+            </div>
+            <div class="chart-card">
+              <div class="chart-head">
+                <div class="chart-title">Hall 电压波形</div>
+                <div class="legend">
+                  <span style="color:#1d65d8"><i class="swatch"></i>Hs</span>
+                  <span style="color:#d23b3b"><i class="swatch"></i>Hc</span>
+                </div>
+              </div>
+              <canvas id="voltageCanvas"></canvas>
+            </div>
+            <div class="chart-card">
+              <div class="chart-head">
+                <div class="chart-title">Lissajous 相图</div>
+                <div class="legend">
+                  <span style="color:#b6c1c9"><i class="swatch"></i>原始</span>
+                  <span style="color:#1b1f23"><i class="swatch"></i>补偿后</span>
+                </div>
+              </div>
+              <canvas id="lissajousCanvas"></canvas>
+            </div>
+            <div class="chart-card">
+              <div class="chart-head">
+                <div class="chart-title">FFT 主要谐波</div>
+                <div class="legend">
+                  <span style="color:#7a55d9"><i class="swatch"></i>幅值</span>
+                </div>
+              </div>
+              <canvas id="fftCanvas"></canvas>
+            </div>
+            <div class="chart-card">
+              <div class="chart-head">
+                <div class="chart-title">机械角解算误差</div>
+                <div class="legend">
+                  <span style="color:#d23b3b"><i class="swatch"></i>原始</span>
+                  <span style="color:#25855b"><i class="swatch"></i>谐波</span>
+                  <span style="color:#7c3fb0"><i class="swatch"></i>ESO</span>
+                </div>
+              </div>
+              <canvas id="errorCanvas"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div id="metrics" class="view">
+          <div class="metrics-viz-grid">
+            <div class="chart-card">
+              <div class="chart-head">
+                <div class="chart-title">误差指标柱状图</div>
+                <div class="legend">
+                  <span style="color:#57a9df"><i class="swatch"></i>最大误差</span>
+                  <span style="color:#d9812b"><i class="swatch"></i>RMS 误差</span>
+                </div>
+              </div>
+              <canvas id="metricsBarCanvas"></canvas>
+            </div>
+            <div class="chart-card">
+              <div class="chart-head">
+                <div class="chart-title">补偿效果雷达图</div>
+                <div class="legend">
+                  <span style="color:#1672ad"><i class="swatch"></i>误差越小越靠外</span>
+                </div>
+              </div>
+              <canvas id="metricsRadarCanvas"></canvas>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>处理方式</th>
+                  <th>最大误差 / deg</th>
+                  <th>RMS 误差 / deg</th>
+                  <th>说明</th>
+                </tr>
+              </thead>
+              <tbody id="metricsBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="principle" class="view">
+          <div class="principle-grid">
+            <div class="principle-card">
+              <h3>1. 双线性 Hall 角度检测模型</h3>
+              <p>两只线性 Hall 固定在电机端面附近，理想情况下空间夹角为 90°。转子磁场扫过传感器时，两路输出形成近似正余弦信号，经过归一化后可通过 atan2 解算磁场角，再换算为机械角。</p>
+              <div class="formula">θ<sub>mag</sub> = p · θ<sub>m</sub> + θ<sub>0</sub></div>
+              <div class="formula">H<sub>s</sub> = O<sub>s</sub> + A<sub>s</sub> sin(θ<sub>mag</sub>) + n<sub>s</sub></div>
+              <div class="formula">H<sub>c</sub> = O<sub>c</sub> + A<sub>c</sub> cos(θ<sub>mag</sub> + Δφ) + n<sub>c</sub></div>
+              <p>其中 p 是 Hall 磁极对数，O 是零偏，A 是幅值，Δφ 包含安装夹角偏离 90°和额外相位误差。</p>
+            </div>
+            <div class="principle-card">
+              <h3>2. 误差来源</h3>
+              <p>真实系统中，两路 Hall 不会天然构成标准单位圆，常见误差会把 Lissajous 相图从圆变成偏心圆、椭圆、倾斜椭圆或带波纹的闭合曲线。</p>
+              <ul class="mini-list">
+                <li>零偏误差：圆心偏离原点。</li>
+                <li>幅值不一致：圆被拉伸成椭圆。</li>
+                <li>安装角不为 90°：相图倾斜，解角产生周期误差。</li>
+                <li>磁钢偏心/充磁不均：出现 2、3、5、6 次等高次谐波。</li>
+                <li>ADC 量化与白噪声：带来随机解角抖动。</li>
+              </ul>
+            </div>
+            <div class="principle-card">
+              <h3>3. 确定性补偿链路</h3>
+              <p>确定性补偿先处理可标定、可重复的误差：零偏、幅值、相位和谐波。其目标是把两路信号重新拉回标准正余弦关系。</p>
+              <div class="formula">x<sub>s</sub> = (H<sub>s</sub> - O<sub>s</sub>) / A<sub>s</sub>, &nbsp; x<sub>c</sub> = (H<sub>c</sub> - O<sub>c</sub>) / A<sub>c</sub></div>
+              <div class="formula">x<sub>c,corr</sub> = (x<sub>c</sub> + x<sub>s</sub> sinΔφ) / cosΔφ</div>
+              <div class="formula">e<sub>fit</sub>(θ)=Σ[A<sub>k</sub>sin(kθ)+B<sub>k</sub>cos(kθ)]</div>
+              <p>补偿后再用 atan2 输出角度：θ̂ = atan2(x<sub>s</sub>, x<sub>c,corr</sub>)。</p>
+            </div>
+            <div class="principle-card">
+              <h3>4. 动态估计与滤波</h3>
+              <p>LPF、α-β 和 ESO 面向随机噪声、采样误差和动态扰动。LPF简单但有滞后；α-β用“角度-速度”预测提高动态跟随；ESO进一步估计未建模扰动。</p>
+              <div class="formula">LPF: &nbsp; y[k] = α y[k-1] + (1-α)x[k]</div>
+              <div class="formula">α-β: &nbsp; θ<sup>-</sup>=θ̂[k-1]+T<sub>s</sub>ω̂[k-1], &nbsp; e=θ<sub>meas</sub>-θ<sup>-</sup></div>
+              <div class="formula">ESO: &nbsp; z<sub>1</sub>≈θ, &nbsp; z<sub>2</sub>≈ω, &nbsp; z<sub>3</sub>≈d</div>
+              <p>所以本软件把确定性补偿和动态估计分开展示，方便判断误差到底来自结构、磁场还是采样噪声。</p>
+            </div>
+          </div>
+        </div>
+
+        <div id="flow" class="view">
+          <div class="algo-flow">
+            <div class="flow-step"><div class="step-no">1</div><div class="step-name">两路 Hall</div><div class="step-note">采集 Hs/Hc。模型：H=O+A·sin/cos(θ)+谐波+噪声。</div></div>
+            <div class="flow-step"><div class="step-no">2</div><div class="step-name">零偏与幅值归一化</div><div class="step-note">x=(H-O)/A，把偏心圆和幅值椭圆先拉回单位尺度。</div></div>
+            <div class="flow-step"><div class="step-no">3</div><div class="step-name">相位 / 安装角补偿</div><div class="step-note">用 x<sub>c,corr</sub>=(x<sub>c</sub>+x<sub>s</sub>sinΔφ)/cosΔφ 修正非 90°安装。</div></div>
+            <div class="flow-step"><div class="step-no">4</div><div class="step-name">谐波重构补偿</div><div class="step-note">用 Σ(Ak sin kθ + Bk cos kθ) 拟合周期误差并扣除。</div></div>
+            <div class="flow-step"><div class="step-no">5</div><div class="step-name">atan2 解角</div><div class="step-note">θ̂<sub>mag</sub>=atan2(xs,xc)，机械角 θ̂<sub>m</sub>=θ̂<sub>mag</sub>/p。</div></div>
+            <div class="flow-step"><div class="step-no">6</div><div class="step-name">α-β / ESO 动态估计</div><div class="step-note">α-β估计角度速度，ESO进一步估计扰动 z3≈d。</div></div>
+          </div>
+        </div>
+
+        <div id="report" class="view">
+          <div class="report-grid">
+            <div class="report-box">
+              <h3>软件功能模块</h3>
+              <p>本软件包括参数配置、信号生成、误差注入、补偿算法、工况仿真、结果显示和报告导出七个模块。</p>
+              <p>当前模型支持零偏、幅值不一致、相位不正交、2/3/5/6 次谐波、ADC 量化、白噪声、恒速、变速、冲击和负载扰动等工况。</p>
+              <p>补偿链路采用零偏估计、幅值归一化、相位补偿、谐波重构、角度域傅里叶误差补偿、α-β 状态估计和离散 ESO 估计。</p>
+            </div>
+            <div class="report-box">
+              <h3>导出内容</h3>
+              <p>PNG：导出四张核心结果图组成的汇总图。</p>
+              <p>CSV：导出各处理方式的最大误差和 RMS 误差。</p>
+              <p>参数：导出当前仿真参数 JSON，可用于复现实验配置。</p>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+                <button id="reportPngBtn">导出汇总 PNG</button>
+                <button id="reportCsvBtn">导出误差 CSV</button>
+                <button id="reportParamBtn">导出参数 JSON</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    "use strict";
+
+    const ids = [
+      "polePairs", "speedRpm", "simTime", "sampleRate", "adcBits", "vref", "mountAngleDeg",
+      "enableOffset", "enableAmp", "enablePhase", "enableHarm", "enableNoise", "enableAdc",
+      "offsetS", "offsetC", "ampS", "ampC", "phaseDeg", "noiseRms", "harmScale", "harmScaleValue",
+      "lpfHz", "abAlpha", "abBeta", "esoHz", "signalOrders", "angleOrders",
+      "scenario", "speedRatio", "impactDeg", "loadDrop", "seed"
+    ];
+    const $ = (id) => document.getElementById(id);
+    const state = { result: null, params: null, modelTheta: 0, modelLastTs: 0, modelAnimReq: 0 };
+
+    const colors = {
+      blue: "#1d65d8",
+      red: "#d23b3b",
+      green: "#25855b",
+      purple: "#7c3fb0",
+      grey: "#b6c1c9",
+      orange: "#d9812b",
+      black: "#1b1f23",
+      axis: "#8da8b9",
+      grid: "#e2eef6"
+    };
+
+    function number(id) {
+      const v = Number($(id).value);
+      return Number.isFinite(v) ? v : 0;
+    }
+
+    function checked(id) {
+      return $(id).checked;
+    }
+
+    function parseOrders(text) {
+      return text.split(",")
+        .map(v => Number(v.trim()))
+        .filter(v => Number.isFinite(v) && v > 0);
+    }
+
+    function readParams() {
+      const p = {
+        polePairs: Math.max(1, Math.round(number("polePairs"))),
+        speedRpm: Math.max(0.1, number("speedRpm")),
+        simTime: clamp(number("simTime"), 0.1, 5),
+        sampleRate: clamp(number("sampleRate"), 500, 50000),
+        adcBits: clamp(Math.round(number("adcBits")), 8, 24),
+        vref: clamp(number("vref"), 1, 5),
+        mountAngleDeg: clamp(number("mountAngleDeg"), 60, 120),
+        enableOffset: checked("enableOffset"),
+        enableAmp: checked("enableAmp"),
+        enablePhase: checked("enablePhase"),
+        enableHarm: checked("enableHarm"),
+        enableNoise: checked("enableNoise"),
+        enableAdc: checked("enableAdc"),
+        offsetS: number("offsetS"),
+        offsetC: number("offsetC"),
+        ampS: Math.max(0.1, number("ampS")),
+        ampC: Math.max(0.1, number("ampC")),
+        phaseDeg: number("phaseDeg"),
+        noiseRms: Math.max(0, number("noiseRms")),
+        harmScale: Math.max(0, number("harmScale")),
+        lpfHz: Math.max(1, number("lpfHz")),
+        abAlpha: clamp(number("abAlpha"), 0, 1),
+        abBeta: clamp(number("abBeta"), 0, 1),
+        esoHz: Math.max(5, number("esoHz")),
+        signalOrders: parseOrders($("signalOrders").value),
+        angleOrders: parseOrders($("angleOrders").value),
+        scenario: $("scenario").value,
+        speedRatio: Math.max(0.2, number("speedRatio")),
+        impactDeg: Math.max(0, number("impactDeg")),
+        loadDrop: clamp(number("loadDrop"), 0, 0.8),
+        seed: Math.round(number("seed"))
+      };
+      p.offsetNom = p.vref / 2;
+      p.ts = 1 / p.sampleRate;
+      p.n = Math.min(Math.floor(p.simTime * p.sampleRate) + 1, 25000);
+      p.actualAmpS = p.enableAmp ? p.ampS : 1.0;
+      p.actualAmpC = p.enableAmp ? p.ampC : 1.0;
+      p.actualOffsetS = p.offsetNom + (p.enableOffset ? p.offsetS : 0);
+      p.actualOffsetC = p.offsetNom + (p.enableOffset ? p.offsetC : 0);
+      p.mountErrDeg = p.mountAngleDeg - 90;
+      p.totalPhaseDeg = p.mountErrDeg + (p.enablePhase ? p.phaseDeg : 0);
+      p.phaseRad = deg2rad(p.totalPhaseDeg);
+      p.harmScale = p.enableHarm ? p.harmScale : 0;
+      return p;
+    }
+
+    function simulate() {
+      const p = readParams();
+      const rng = mulberry32(p.seed);
+      const t = new Array(p.n);
+      const thetaM = new Array(p.n);
+      const omegaM = new Array(p.n);
+      const thetaMag = new Array(p.n);
+      const hsClean = new Array(p.n);
+      const hcClean = new Array(p.n);
+      const hs = new Array(p.n);
+      const hc = new Array(p.n);
+      const baseOmega = 2 * Math.PI * (p.speedRpm / 60);
+      let theta = 0;
+
+      for (let i = 0; i < p.n; i++) {
+        const ti = i * p.ts;
+        t[i] = ti;
+        const profile = speedProfile(p, ti);
+        omegaM[i] = profile.omega;
+        if (i > 0) theta += 0.5 * (omegaM[i] + omegaM[i - 1]) * p.ts;
+        thetaM[i] = theta + profile.angleOffset;
+        thetaMag[i] = p.polePairs * thetaM[i];
+
+        const clean = hallSignal(thetaMag[i], p, false);
+        hsClean[i] = clean.hs;
+        hcClean[i] = clean.hc;
+
+        const noisy = hallSignal(thetaMag[i], p, true, rng);
+        hs[i] = p.enableAdc ? adcQuantize(noisy.hs, p) : noisy.hs;
+        hc[i] = p.enableAdc ? adcQuantize(noisy.hc, p) : noisy.hc;
+      }
+
+      const cal = estimateCalibration(hs, hc, thetaMag, p);
+      const raw = rawDecode(hs, hc, thetaMag, p);
+      const basic = basicCompensate(hs, hc, thetaMag, cal, p);
+      const harmonic = harmonicCompensate(basic, thetaMag, p);
+      const thetaAb = alphaBeta(harmonic.thetaAngleComp, p.ts, p.abAlpha, p.abBeta).theta;
+      const thetaEso = esoFilter(harmonic.thetaAngleComp, p.ts, p.esoHz).theta;
+      const thetaLpf = firstOrderLpf(harmonic.thetaAngleComp, lpfAlpha(p.ts, p.lpfHz));
+
+      const errRaw = angleError(raw.theta, thetaMag, p.polePairs);
+      const errBasic = angleError(basic.thetaBasic, thetaMag, p.polePairs);
+      const errHarm = angleError(harmonic.thetaAngleComp, thetaMag, p.polePairs);
+      const errLpf = angleError(thetaLpf, thetaMag, p.polePairs);
+      const errAb = angleError(thetaAb, thetaMag, p.polePairs);
+      const errEso = angleError(thetaEso, thetaMag, p.polePairs);
+
+      const fft = harmonicSpectrum(basic.sinNorm, thetaMag, 12, p);
+      const metrics = [
+        rowMetric("原始 atan2", errRaw, "未补偿，直接按名义零偏和幅值解角"),
+        rowMetric("零偏/幅值/相位补偿", errBasic, "估计中心、幅值和相位误差"),
+        rowMetric("谐波补偿", errHarm, "信号域谐波重构 + 角度域补偿"),
+        rowMetric("角度 LPF", errLpf, "补偿后角度一阶低通"),
+        rowMetric("alpha-beta", errAb, "角度-角速度状态估计"),
+        rowMetric("离散 ESO", errEso, "角度、角速度、总扰动估计")
+      ];
+
+      state.params = p;
+      state.result = { p, t, thetaM, omegaM, thetaMag, hsClean, hcClean, hs, hc, raw, basic, harmonic, thetaLpf, thetaAb, thetaEso, errRaw, errBasic, errHarm, errLpf, errAb, errEso, fft, metrics };
+      renderAll();
+    }
+
+    function speedProfile(p, t) {
+      const base = 2 * Math.PI * (p.speedRpm / 60);
+      let omega = base;
+      let angleOffset = 0;
+      if (p.scenario === "variable") {
+        const s = smoothStep((t - 0.2 * p.simTime) / (0.6 * p.simTime));
+        omega = base * (1 + (p.speedRatio - 1) * s) + 0.06 * base * Math.sin(2 * Math.PI * 3 * t) * s;
+      } else if (p.scenario === "impact") {
+        const start = 0.45 * p.simTime;
+        if (t >= start) {
+          const x = t - start;
+          angleOffset = deg2rad(p.impactDeg) * Math.exp(-18 * x) * Math.sin(2 * Math.PI * 24 * x);
+        }
+      } else if (p.scenario === "load") {
+        const start = 0.45 * p.simTime;
+        const s = t >= start ? 1 - Math.exp(-9 * (t - start)) : 0;
+        omega = base * (1 - p.loadDrop * s) + 0.04 * base * Math.sin(2 * Math.PI * 7 * t) * s;
+      }
+      return { omega, angleOffset };
+    }
+
+    function hallSignal(theta, p, withNoise, rng) {
+      const harm = harmonicVoltage(theta, p);
+      const hs = p.actualOffsetS + p.actualAmpS * Math.sin(theta) + harm.hs + (withNoise && p.enableNoise ? p.noiseRms * randn(rng) : 0);
+      const hc = p.actualOffsetC + p.actualAmpC * Math.cos(theta + p.phaseRad) + harm.hc + (withNoise && p.enableNoise ? p.noiseRms * randn(rng) : 0);
+      return { hs, hc };
+    }
+
+    function harmonicVoltage(theta, p) {
+      const sSin = [0.050, -0.035, 0.024, 0.016];
+      const sCos = [0.018, 0.028, -0.014, 0.010];
+      const cSin = [-0.032, 0.022, 0.016, -0.012];
+      const cCos = [0.040, 0.030, -0.018, 0.013];
+      const orders = [2, 3, 5, 6];
+      let hs = 0;
+      let hc = 0;
+      for (let i = 0; i < orders.length; i++) {
+        const n = orders[i];
+        hs += sSin[i] * Math.sin(n * theta) + sCos[i] * Math.cos(n * theta);
+        hc += cSin[i] * Math.sin(n * theta) + cCos[i] * Math.cos(n * theta);
+      }
+      return { hs: p.harmScale * hs, hc: p.harmScale * hc };
+    }
+
+    function rawDecode(hs, hc, thetaMag, p) {
+      const s = hs.map(v => (v - p.offsetNom) / 1.0);
+      const c = hc.map(v => (v - p.offsetNom) / 1.0);
+      return { theta: unwrap(s.map((v, i) => Math.atan2(v, c[i]))), sinNorm: s, cosNorm: c };
+    }
+
+    function estimateCalibration(hs, hc, thetaMag, p) {
+      const os = 0.5 * (max(hs) + min(hs));
+      const oc = 0.5 * (max(hc) + min(hc));
+      const as = Math.max(1e-9, 0.5 * (max(hs) - min(hs)));
+      const ac = Math.max(1e-9, 0.5 * (max(hc) - min(hc)));
+      const s = hs.map(v => (v - os) / as);
+      const c = hc.map(v => (v - oc) / ac);
+      const sm = mean(s);
+      const cm = mean(c);
+      const cov = mean(s.map((v, i) => (v - sm) * (c[i] - cm)));
+      const den = Math.sqrt(mean(s.map(v => (v - sm) ** 2)) * mean(c.map(v => (v - cm) ** 2)));
+      const coef = clamp(cov / Math.max(den, 1e-12), -1, 1);
+      const phase = Math.asin(-coef);
+      return { os, oc, as, ac, phase };
+    }
+
+    function basicCompensate(hs, hc, thetaMag, cal, p) {
+      const sinNorm = hs.map(v => (v - cal.os) / cal.as);
+      const cosRaw = hc.map(v => (v - cal.oc) / cal.ac);
+      const cosNorm = cosRaw.map((v, i) => (v + sinNorm[i] * Math.sin(cal.phase)) / Math.cos(cal.phase));
+      const thetaBasic = alignAngle(unwrap(sinNorm.map((v, i) => Math.atan2(v, cosNorm[i]))), thetaMag);
+      return { thetaBasic, sinNorm, cosNorm };
+    }
+
+    function harmonicCompensate(basic, thetaMag, p) {
+      const phiSig = basisMatrix(basic.thetaBasic, p.signalOrders);
+      const sinIdeal = thetaMag.map(Math.sin);
+      const cosIdeal = thetaMag.map(Math.cos);
+      const coefS = leastSquares(phiSig, basic.sinNorm.map((v, i) => v - sinIdeal[i]));
+      const coefC = leastSquares(phiSig, basic.cosNorm.map((v, i) => v - cosIdeal[i]));
+      const sinEst = multiply(phiSig, coefS);
+      const cosEst = multiply(phiSig, coefC);
+      const sinSig = basic.sinNorm.map((v, i) => v - sinEst[i]);
+      const cosSig = basic.cosNorm.map((v, i) => v - cosEst[i]);
+      const thetaSig = alignAngle(unwrap(sinSig.map((v, i) => Math.atan2(v, cosSig[i]))), thetaMag);
+
+      const phiAng = basisMatrix(basic.thetaBasic, p.angleOrders);
+      const errBasic = basic.thetaBasic.map((v, i) => wrapPi(v - thetaMag[i]));
+      const coefAng = leastSquares(phiAng, errBasic);
+      const errHat = multiply(phiAng, coefAng);
+      const thetaAngleComp = alignAngle(basic.thetaBasic.map((v, i) => v - errHat[i]), thetaMag);
+      return { thetaSig, thetaAngleComp, sinSig, cosSig, coefS, coefC, coefAng };
+    }
+
+    function alphaBeta(thetaMeas, ts, alpha, beta) {
+      const n = thetaMeas.length;
+      const theta = new Array(n).fill(0);
+      const omega = new Array(n).fill(0);
+      theta[0] = thetaMeas[0];
+      omega[0] = n > 1 ? (thetaMeas[1] - thetaMeas[0]) / ts : 0;
+      for (let i = 1; i < n; i++) {
+        const pred = theta[i - 1] + ts * omega[i - 1];
+        const err = thetaMeas[i] - pred;
+        theta[i] = pred + alpha * err;
+        omega[i] = omega[i - 1] + beta / ts * err;
+      }
+      return { theta, omega };
+    }
+
+    function esoFilter(thetaMeas, ts, bandwidthHz) {
+      const n = thetaMeas.length;
+      const z1 = new Array(n).fill(0);
+      const z2 = new Array(n).fill(0);
+      const z3 = new Array(n).fill(0);
+      const wo = 2 * Math.PI * bandwidthHz;
+      const b1 = 3 * wo;
+      const b2 = 3 * wo * wo;
+      const b3 = wo * wo * wo;
+      z1[0] = thetaMeas[0];
+      for (let i = 1; i < n; i++) {
+        const err = thetaMeas[i - 1] - z1[i - 1];
+        z1[i] = z1[i - 1] + ts * (z2[i - 1] + b1 * err);
+        z2[i] = z2[i - 1] + ts * (z3[i - 1] + b2 * err);
+        z3[i] = z3[i - 1] + ts * b3 * err;
+      }
+      return { theta: z1, omega: z2, disturbance: z3 };
+    }
+
+    function harmonicSpectrum(signal, thetaMag, maxOrder, p) {
+      const x = signal.map(v => v - mean(signal));
+      const result = [];
+      for (let n = 1; n <= maxOrder; n++) {
+        let ss = 0, cc = 0;
+        for (let i = 0; i < x.length; i++) {
+          ss += x[i] * Math.sin(n * thetaMag[i]);
+          cc += x[i] * Math.cos(n * thetaMag[i]);
+        }
+        const amp = 2 / x.length * Math.sqrt(ss * ss + cc * cc);
+        result.push({ order: n, freq: n * p.polePairs * p.speedRpm / 60, amp, db: 20 * Math.log10(Math.max(amp, 1e-6)) });
+      }
+      return result;
+    }
+
+    function renderAll() {
+      const r = state.result;
+      if (!r) return;
+      $("rawMax").textContent = fmtDeg(maxAbs(r.errRaw));
+      $("basicRms").textContent = fmtDeg(rms(r.errBasic));
+      $("harmRms").textContent = fmtDeg(rms(r.errHarm));
+      $("esoRms").textContent = fmtDeg(rms(r.errEso));
+      renderMetrics();
+      drawMotorModel();
+      drawVoltage();
+      drawLissajous();
+      drawFft();
+      drawError();
+      drawMetricsVisuals();
+    }
+
+    function renderMetrics() {
+      const body = $("metricsBody");
+      body.innerHTML = "";
+      for (const m of state.result.metrics) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${m.name}</td><td>${m.maxDeg.toFixed(4)}</td><td>${m.rmsDeg.toFixed(4)}</td><td>${m.note}</td>`;
+        body.appendChild(tr);
+      }
+    }
+
+    function drawVoltage() {
+      const r = state.result;
+      drawLines("voltageCanvas", r.t, [
+        { y: r.hs, color: colors.blue, name: "Hs" },
+        { y: r.hc, color: colors.red, name: "Hc" }
+      ], { xLabel: "Time / s", yLabel: "Voltage / V" });
+    }
+
+    function drawLissajous() {
+      const r = state.result;
+      drawXY("lissajousCanvas", [
+        { x: r.basic.cosNorm, y: r.basic.sinNorm, color: colors.grey, name: "raw" },
+        { x: r.harmonic.cosSig, y: r.harmonic.sinSig, color: colors.black, name: "comp" }
+      ], { xLabel: "normalized Hc", yLabel: "normalized Hs" });
+    }
+
+    function drawFft() {
+      const r = state.result;
+      drawBars("fftCanvas", r.fft.map(v => v.freq), r.fft.map(v => v.db), {
+        color: "#7a55d9",
+        xLabel: "Frequency / Hz",
+        yLabel: "Amplitude / dB",
+        labels: r.fft.map(v => `${v.order}`)
+      });
+    }
+
+    function drawError() {
+      const r = state.result;
+      drawLines("errorCanvas", r.t, [
+        { y: r.errRaw.map(rad2deg), color: colors.red, name: "raw" },
+        { y: r.errHarm.map(rad2deg), color: colors.green, name: "harmonic" },
+        { y: r.errEso.map(rad2deg), color: colors.purple, name: "eso" }
+      ], { xLabel: "Time / s", yLabel: "Mechanical error / deg" });
+    }
+
+    function drawMotorModel() {
+      const r = state.result;
+      if (!r) return;
+      const p = r.p;
+      const canvas = setupCanvas("modelCanvas");
+      const ctx = canvas.getContext("2d");
+      clearChart(ctx, canvas);
+      const cx = canvas.width * 0.43;
+      const cy = canvas.height * 0.52;
+      const rx = Math.min(canvas.width * 0.24, 190);
+      const ry = rx * 0.46;
+      const depth = 54;
+
+      const grad = ctx.createLinearGradient(cx - rx, cy - ry - depth, cx + rx, cy + ry);
+      grad.addColorStop(0, "#cfefff");
+      grad.addColorStop(1, "#ffffff");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      drawGridFloor(ctx, canvas, cy + ry + 46);
+
+      // 伪三维电机壳体
+      ctx.fillStyle = "#d9edf8";
+      ctx.strokeStyle = "#8bbdd8";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + depth, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#edf8ff";
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(83, 143, 178, 0.45)";
+      ctx.beginPath();
+      ctx.moveTo(cx - rx, cy);
+      ctx.lineTo(cx - rx, cy + depth);
+      ctx.moveTo(cx + rx, cy);
+      ctx.lineTo(cx + rx, cy + depth);
+      ctx.stroke();
+
+      const rotorAngle = state.modelTheta || 0;
+      const fieldAngle = rotorAngle * p.polePairs - Math.PI / 2;
+
+      // 中空磁钢，用交替色块表达 N/S，并随时间旋转。
+      const poleCount = p.polePairs * 2;
+      for (let i = 0; i < poleCount; i++) {
+        const a0 = rotorAngle - Math.PI / 2 + i * Math.PI * 2 / poleCount;
+        const a1 = rotorAngle - Math.PI / 2 + (i + 0.82) * Math.PI * 2 / poleCount;
+        drawRingSector(ctx, cx, cy, rx * 0.70, ry * 0.70, rx * 0.43, ry * 0.43, a0, a1, i % 2 ? "#6ec6e8" : "#f49b69");
+      }
+      ctx.fillStyle = "#ffffff";
+      ctx.strokeStyle = "#93bfd6";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx * 0.34, ry * 0.34, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // 转轴与磁场方向。
+      ctx.strokeStyle = "#315b73";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(cx - rx * 1.08, cy);
+      ctx.lineTo(cx + rx * 1.12, cy);
+      ctx.stroke();
+      drawArrow(ctx, cx, cy, cx + rx * 0.78 * Math.cos(fieldAngle), cy + ry * 0.78 * Math.sin(fieldAngle), "#1672ad");
+      ctx.fillStyle = "#1672ad";
+      ctx.font = "700 13px Microsoft YaHei";
+      ctx.fillText("磁场角 θmag", cx + rx * 0.32, cy - ry * 0.60);
+
+      // 两个线性 Hall，Hall C 位置由安装夹角控制。
+      const hallSAngle = -Math.PI / 2;
+      const hallCAngle = hallSAngle + deg2rad(p.mountAngleDeg);
+      const hs = ellipsePoint(cx, cy, rx * 0.93, ry * 0.93, hallSAngle);
+      const hc = ellipsePoint(cx, cy, rx * 0.93, ry * 0.93, hallCAngle);
+      drawHallChip(ctx, hs.x - 30, hs.y - 56, "Hall S", "#d9812b");
+      drawHallChip(ctx, hc.x + 16, hc.y - 18, "Hall C", "#2ba86a");
+      drawArrow(ctx, hs.x - 2, hs.y - 23, hs.x, hs.y - 2, "#d9812b");
+      drawArrow(ctx, hc.x + 8, hc.y + 2, hc.x - 8, hc.y, "#2ba86a");
+      ctx.strokeStyle = "#8da8b9";
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(hs.x, hs.y);
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(hc.x, hc.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      drawAngleArc(ctx, cx, cy, rx * 0.31, ry * 0.31, hallSAngle, hallCAngle, "#1672ad", `${p.mountAngleDeg.toFixed(1)}°`);
+
+      // 右侧信息卡，让结构图和参数联动。
+      const infoX = Math.max(18, Math.min(canvas.width - 270, canvas.width * 0.70));
+      drawInfoCard(ctx, infoX, 48, 245, 190, [
+        ["Hall 极对数", `${p.polePairs}`],
+        ["磁极数", `${poleCount}`],
+        ["安装夹角", `${p.mountAngleDeg.toFixed(1)}°`],
+        ["等效相位误差", `${p.totalPhaseDeg.toFixed(1)}°`],
+        ["ADC", `${p.adcBits} bit / ${p.vref.toFixed(1)} V`],
+        ["机械转速", `${p.speedRpm.toFixed(1)} rpm`],
+        ["工况", scenarioName(p.scenario)]
+      ]);
+      drawInfoCard(ctx, infoX, 254, 245, 60, [
+        ["输出链路", "Hs/Hc → 补偿 → atan2"],
+        ["用途", "电机轴 / 关节相对角反馈"]
+      ]);
+
+      ctx.fillStyle = "#19384d";
+      ctx.font = "700 16px Microsoft YaHei";
+      ctx.fillText("中空磁钢 + 双线性 Hall 端面安装示意", 22, 28);
+      ctx.font = "12px Microsoft YaHei";
+      ctx.fillStyle = "#60788a";
+      ctx.fillText("注：该图为结构与信号关系示意，不代表具体机械尺寸。", 22, canvas.height - 18);
+    }
+
+    function drawMetricsVisuals() {
+      const r = state.result;
+      if (!r) return;
+      drawMetricsBar("metricsBarCanvas", r.metrics);
+      drawMetricsRadar("metricsRadarCanvas", r.metrics);
+    }
+
+    function drawMetricsBar(canvasId, metrics) {
+      const canvas = setupCanvas(canvasId);
+      const ctx = canvas.getContext("2d");
+      clearChart(ctx, canvas);
+      const pad = { l: 54, r: 18, t: 22, b: 74 };
+      const maxY = Math.max(...metrics.flatMap(m => [m.maxDeg, m.rmsDeg]), 0.1) * 1.15;
+      drawAxes(ctx, canvas, pad, [0, metrics.length], [0, maxY], { xLabel: "处理方式", yLabel: "误差 / deg" });
+      const plotW = canvas.width - pad.l - pad.r;
+      const groupW = plotW / metrics.length;
+      const bw = Math.min(24, groupW * 0.24);
+      metrics.forEach((m, i) => {
+        const baseX = pad.l + i * groupW + groupW / 2;
+        const y0 = map(0, 0, maxY, canvas.height - pad.b, pad.t);
+        const yMax = map(m.maxDeg, 0, maxY, canvas.height - pad.b, pad.t);
+        const yRms = map(m.rmsDeg, 0, maxY, canvas.height - pad.b, pad.t);
+        ctx.fillStyle = "#57a9df";
+        ctx.fillRect(baseX - bw - 2, yMax, bw, y0 - yMax);
+        ctx.fillStyle = "#d9812b";
+        ctx.fillRect(baseX + 2, yRms, bw, y0 - yRms);
+        ctx.save();
+        ctx.translate(baseX, canvas.height - pad.b + 12);
+        ctx.rotate(-Math.PI / 5);
+        ctx.fillStyle = "#60788a";
+        ctx.font = "12px Microsoft YaHei";
+        ctx.textAlign = "right";
+        ctx.fillText(shortMetricName(m.name), 0, 0);
+        ctx.restore();
+      });
+    }
+
+    function drawMetricsRadar(canvasId, metrics) {
+      const canvas = setupCanvas(canvasId);
+      const ctx = canvas.getContext("2d");
+      clearChart(ctx, canvas);
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2 + 8;
+      const radius = Math.min(canvas.width, canvas.height) * 0.33;
+      const maxRms = Math.max(...metrics.map(m => m.rmsDeg), 1e-6);
+      const scores = metrics.map(m => Math.max(0.05, 1 - m.rmsDeg / (maxRms * 1.08)));
+
+      ctx.strokeStyle = "#d8eaf5";
+      ctx.fillStyle = "#f6fbff";
+      for (let ring = 4; ring >= 1; ring--) {
+        ctx.beginPath();
+        for (let i = 0; i < metrics.length; i++) {
+          const a = -Math.PI / 2 + i * Math.PI * 2 / metrics.length;
+          const x = cx + Math.cos(a) * radius * ring / 4;
+          const y = cy + Math.sin(a) * radius * ring / 4;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        if (ring === 4) ctx.fill();
+        ctx.stroke();
+      }
+      ctx.strokeStyle = "#b9d8e9";
+      metrics.forEach((m, i) => {
+        const a = -Math.PI / 2 + i * Math.PI * 2 / metrics.length;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + Math.cos(a) * radius, cy + Math.sin(a) * radius);
+        ctx.stroke();
+        ctx.fillStyle = "#60788a";
+        ctx.font = "12px Microsoft YaHei";
+        ctx.textAlign = Math.cos(a) > 0.2 ? "left" : (Math.cos(a) < -0.2 ? "right" : "center");
+        ctx.textBaseline = Math.sin(a) > 0.4 ? "top" : (Math.sin(a) < -0.4 ? "bottom" : "middle");
+        ctx.fillText(shortMetricName(m.name), cx + Math.cos(a) * (radius + 12), cy + Math.sin(a) * (radius + 12));
+      });
+      ctx.beginPath();
+      scores.forEach((s, i) => {
+        const a = -Math.PI / 2 + i * Math.PI * 2 / scores.length;
+        const x = cx + Math.cos(a) * radius * s;
+        const y = cy + Math.sin(a) * radius * s;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      ctx.fillStyle = "rgba(22, 114, 173, 0.18)";
+      ctx.strokeStyle = "#1672ad";
+      ctx.lineWidth = 2;
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#60788a";
+      ctx.font = "12px Microsoft YaHei";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText("RMS 误差越小，顶点越靠外", cx, 12);
+    }
+
+    function drawLines(canvasId, x, series, opt) {
+      const canvas = setupCanvas(canvasId);
+      const ctx = canvas.getContext("2d");
+      const pad = { l: 58, r: 18, t: 18, b: 42 };
+      const flatY = series.flatMap(s => s.y);
+      const xr = range(x);
+      const yr = paddedRange(flatY);
+      clearChart(ctx, canvas);
+      drawAxes(ctx, canvas, pad, xr, yr, opt);
+      for (const s of series) {
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 1.7;
+        ctx.beginPath();
+        for (let i = 0; i < x.length; i++) {
+          const px = map(x[i], xr[0], xr[1], pad.l, canvas.width - pad.r);
+          const py = map(s.y[i], yr[0], yr[1], canvas.height - pad.b, pad.t);
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+    }
+
+    function drawXY(canvasId, series, opt) {
+      const canvas = setupCanvas(canvasId);
+      const ctx = canvas.getContext("2d");
+      const pad = { l: 58, r: 18, t: 18, b: 42 };
+      const xr = paddedRange(series.flatMap(s => s.x));
+      const yr = paddedRange(series.flatMap(s => s.y));
+      clearChart(ctx, canvas);
+      drawAxes(ctx, canvas, pad, xr, yr, opt);
+      for (const s of series) {
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = s.color === colors.grey ? 1.3 : 1.8;
+        ctx.beginPath();
+        for (let i = 0; i < s.x.length; i++) {
+          const px = map(s.x[i], xr[0], xr[1], pad.l, canvas.width - pad.r);
+          const py = map(s.y[i], yr[0], yr[1], canvas.height - pad.b, pad.t);
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+    }
+
+    function drawBars(canvasId, x, y, opt) {
+      const canvas = setupCanvas(canvasId);
+      const ctx = canvas.getContext("2d");
+      const pad = { l: 58, r: 18, t: 18, b: 42 };
+      const xr = [0, Math.max(...x) * 1.08];
+      const yr = paddedRange(y.concat([-80, 0]));
+      clearChart(ctx, canvas);
+      drawAxes(ctx, canvas, pad, xr, yr, opt);
+      const w = Math.max(4, (canvas.width - pad.l - pad.r) / (x.length * 2.8));
+      ctx.fillStyle = opt.color;
+      ctx.strokeStyle = opt.color;
+      for (let i = 0; i < x.length; i++) {
+        const px = map(x[i], xr[0], xr[1], pad.l, canvas.width - pad.r);
+        const py = map(y[i], yr[0], yr[1], canvas.height - pad.b, pad.t);
+        const y0 = map(yr[0], yr[0], yr[1], canvas.height - pad.b, pad.t);
+        ctx.fillRect(px - w / 2, py, w, Math.max(1, y0 - py));
+        ctx.fillStyle = colors.muted || "#60788a";
+        ctx.font = "12px Microsoft YaHei";
+        ctx.textAlign = "center";
+        ctx.fillText(`${opt.labels[i]}x`, px, py - 5);
+        ctx.fillStyle = opt.color;
+      }
+    }
+
+    function drawGridFloor(ctx, canvas, y) {
+      ctx.strokeStyle = "rgba(141, 168, 185, 0.22)";
+      ctx.lineWidth = 1;
+      for (let x = -canvas.width; x < canvas.width * 1.5; x += 34) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + 220, canvas.height);
+        ctx.stroke();
+      }
+      for (let i = 0; i < 7; i++) {
+        const yy = y + i * 22;
+        ctx.beginPath();
+        ctx.moveTo(0, yy);
+        ctx.lineTo(canvas.width, yy);
+        ctx.stroke();
+      }
+    }
+
+    function drawRingSector(ctx, cx, cy, rxO, ryO, rxI, ryI, a0, a1, fill) {
+      ctx.beginPath();
+      for (let i = 0; i <= 16; i++) {
+        const a = a0 + (a1 - a0) * i / 16;
+        const x = cx + rxO * Math.cos(a);
+        const y = cy + ryO * Math.sin(a);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      for (let i = 16; i >= 0; i--) {
+        const a = a0 + (a1 - a0) * i / 16;
+        ctx.lineTo(cx + rxI * Math.cos(a), cy + ryI * Math.sin(a));
+      }
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.65)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    function ellipsePoint(cx, cy, rx, ry, angle) {
+      return { x: cx + rx * Math.cos(angle), y: cy + ry * Math.sin(angle) };
+    }
+
+    function drawHallChip(ctx, x, y, label, color) {
+      roundRect(ctx, x, y, 72, 34, 7);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.font = "700 12px Microsoft YaHei";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, x + 36, y + 17);
+    }
+
+    function drawArrow(ctx, x1, y1, x2, y2, color) {
+      const a = Math.atan2(y2 - y1, x2 - x1);
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - 9 * Math.cos(a - 0.45), y2 - 9 * Math.sin(a - 0.45));
+      ctx.lineTo(x2 - 9 * Math.cos(a + 0.45), y2 - 9 * Math.sin(a + 0.45));
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawAngleArc(ctx, cx, cy, rx, ry, a0, a1, color, label) {
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i <= 32; i++) {
+        const a = a0 + (a1 - a0) * i / 32;
+        const x = cx + rx * Math.cos(a);
+        const y = cy + ry * Math.sin(a);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      const am = (a0 + a1) / 2;
+      ctx.font = "700 12px Microsoft YaHei";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, cx + (rx + 22) * Math.cos(am), cy + (ry + 22) * Math.sin(am));
+    }
+
+    function drawInfoCard(ctx, x, y, w, h, rows) {
+      roundRect(ctx, x, y, w, h, 8);
+      ctx.fillStyle = "rgba(255,255,255,0.88)";
+      ctx.fill();
+      ctx.strokeStyle = "#bde0f5";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.font = "12px Microsoft YaHei";
+      rows.forEach((row, i) => {
+        const yy = y + 18 + i * 24;
+        ctx.fillStyle = "#60788a";
+        ctx.textAlign = "left";
+        ctx.fillText(row[0], x + 14, yy);
+        ctx.fillStyle = "#19384d";
+        ctx.font = "700 12px Microsoft YaHei";
+        ctx.textAlign = "right";
+        ctx.fillText(row[1], x + w - 14, yy);
+        ctx.font = "12px Microsoft YaHei";
+      });
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      const rr = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + rr, y);
+      ctx.lineTo(x + w - rr, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+      ctx.lineTo(x + w, y + h - rr);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+      ctx.lineTo(x + rr, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+      ctx.lineTo(x, y + rr);
+      ctx.quadraticCurveTo(x, y, x + rr, y);
+      ctx.closePath();
+    }
+
+    function shortMetricName(name) {
+      return name
+        .replace("原始 atan2", "原始")
+        .replace("零偏/幅值/相位", "基础")
+        .replace("谐波补偿", "谐波")
+        .replace("角度 LPF", "LPF")
+        .replace("alpha-beta", "α-β")
+        .replace("离散 ESO", "ESO");
+    }
+
+    function setupCanvas(id) {
+      const canvas = $(id);
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = Math.max(320, Math.floor(rect.width));
+      canvas.height = Math.max(220, Math.floor(rect.height));
+      return canvas;
+    }
+
+    function clearChart(ctx, canvas) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function drawAxes(ctx, canvas, pad, xr, yr, opt) {
+      ctx.strokeStyle = colors.grid;
+      ctx.lineWidth = 1;
+      ctx.font = "12px Microsoft YaHei";
+      ctx.fillStyle = "#60788a";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      for (let i = 0; i <= 5; i++) {
+        const yv = yr[0] + (yr[1] - yr[0]) * i / 5;
+        const py = map(yv, yr[0], yr[1], canvas.height - pad.b, pad.t);
+        ctx.beginPath();
+        ctx.moveTo(pad.l, py);
+        ctx.lineTo(canvas.width - pad.r, py);
+        ctx.stroke();
+        ctx.fillText(shortNum(yv), pad.l - 7, py);
+      }
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      for (let i = 0; i <= 5; i++) {
+        const xv = xr[0] + (xr[1] - xr[0]) * i / 5;
+        const px = map(xv, xr[0], xr[1], pad.l, canvas.width - pad.r);
+        ctx.beginPath();
+        ctx.moveTo(px, pad.t);
+        ctx.lineTo(px, canvas.height - pad.b);
+        ctx.stroke();
+        ctx.fillText(shortNum(xv), px, canvas.height - pad.b + 7);
+      }
+      ctx.strokeStyle = colors.axis;
+      ctx.strokeRect(pad.l, pad.t, canvas.width - pad.l - pad.r, canvas.height - pad.t - pad.b);
+      ctx.fillStyle = "#19384d";
+      ctx.textAlign = "center";
+      ctx.fillText(opt.xLabel || "", (pad.l + canvas.width - pad.r) / 2, canvas.height - 19);
+      ctx.save();
+      ctx.translate(16, (pad.t + canvas.height - pad.b) / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText(opt.yLabel || "", 0, 0);
+      ctx.restore();
+    }
+
+    function exportDashboardPng() {
+      const canvases = ["modelCanvas", "voltageCanvas", "lissajousCanvas", "fftCanvas", "errorCanvas"].map(id => $(id));
+      const w = 1500, h = 1320;
+      const out = document.createElement("canvas");
+      out.width = w;
+      out.height = h;
+      const ctx = out.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = "#19384d";
+      ctx.font = "700 28px Microsoft YaHei";
+      ctx.fillText("双线性 Hall 高精度位置检测与补偿仿真结果", 40, 50);
+      ctx.font = "16px Microsoft YaHei";
+      ctx.fillStyle = "#60788a";
+      ctx.fillText(`工况：${scenarioName(state.params.scenario)}   ESO带宽：${state.params.esoHz} Hz   采样：${state.params.sampleRate} Hz`, 40, 82);
+      const boxes = [
+        [40, 120, 1420, 330],
+        [40, 500, 680, 350], [780, 500, 680, 350],
+        [40, 910, 680, 350], [780, 910, 680, 350]
+      ];
+      canvases.forEach((c, i) => {
+        ctx.drawImage(c, boxes[i][0], boxes[i][1], boxes[i][2], boxes[i][3]);
+      });
+      download(out.toDataURL("image/png"), "dual_hall_detection_dashboard.png");
+      toast("已导出 PNG");
+    }
+
+    function exportCsv() {
+      const rows = [["method", "max_error_deg", "rms_error_deg", "note"]];
+      for (const m of state.result.metrics) rows.push([m.name, m.maxDeg.toFixed(8), m.rmsDeg.toFixed(8), m.note]);
+      downloadText(rows.map(r => r.map(csvCell).join(",")).join("\n"), "dual_hall_detection_metrics.csv", "text/csv;charset=utf-8");
+      toast("已导出 CSV");
+    }
+
+    function exportParams() {
+      downloadText(JSON.stringify(state.params, null, 2), "dual_hall_detection_params.json", "application/json;charset=utf-8");
+      toast("已导出参数 JSON");
+    }
+
+    function rowMetric(name, err, note) {
+      const deg = err.map(rad2deg);
+      return { name, maxDeg: maxAbs(deg), rmsDeg: rms(deg), note };
+    }
+
+    function firstOrderLpf(x, alpha) {
+      const y = new Array(x.length);
+      y[0] = x[0];
+      for (let i = 1; i < x.length; i++) y[i] = alpha * y[i - 1] + (1 - alpha) * x[i];
+      return y;
+    }
+
+    function lpfAlpha(ts, cutoffHz) {
+      const tau = 1 / (2 * Math.PI * cutoffHz);
+      return Math.exp(-ts / tau);
+    }
+
+    function angleError(thetaEst, thetaMag, polePairs) {
+      return thetaEst.map((v, i) => wrapPi(v - thetaMag[i]) / polePairs);
+    }
+
+    function basisMatrix(theta, orders) {
+      return theta.map(th => {
+        const row = [1];
+        for (const n of orders) {
+          row.push(Math.sin(n * th), Math.cos(n * th));
+        }
+        return row;
+      });
+    }
+
+    function leastSquares(A, b) {
+      const m = A.length;
+      const n = A[0].length;
+      const ata = Array.from({ length: n }, () => new Array(n).fill(0));
+      const atb = new Array(n).fill(0);
+      for (let i = 0; i < m; i++) {
+        for (let c = 0; c < n; c++) {
+          atb[c] += A[i][c] * b[i];
+          for (let d = 0; d < n; d++) ata[c][d] += A[i][c] * A[i][d];
+        }
+      }
+      for (let i = 0; i < n; i++) ata[i][i] += 1e-8;
+      return solveLinear(ata, atb);
+    }
+
+    function solveLinear(A, b) {
+      const n = b.length;
+      const M = A.map((row, i) => row.concat(b[i]));
+      for (let k = 0; k < n; k++) {
+        let maxRow = k;
+        for (let i = k + 1; i < n; i++) if (Math.abs(M[i][k]) > Math.abs(M[maxRow][k])) maxRow = i;
+        [M[k], M[maxRow]] = [M[maxRow], M[k]];
+        const pivot = Math.abs(M[k][k]) < 1e-12 ? 1e-12 : M[k][k];
+        for (let j = k; j <= n; j++) M[k][j] /= pivot;
+        for (let i = 0; i < n; i++) {
+          if (i === k) continue;
+          const factor = M[i][k];
+          for (let j = k; j <= n; j++) M[i][j] -= factor * M[k][j];
+        }
+      }
+      return M.map(row => row[n]);
+    }
+
+    function multiply(A, x) {
+      return A.map(row => row.reduce((sum, v, i) => sum + v * x[i], 0));
+    }
+
+    function adcQuantize(v, p) {
+      const vmax = Math.pow(2, p.adcBits) - 1;
+      const clipped = clamp(v, 0, p.vref);
+      return Math.round(clipped / p.vref * vmax) / vmax * p.vref;
+    }
+
+    function unwrap(arr) {
+      const out = new Array(arr.length);
+      out[0] = arr[0];
+      let offset = 0;
+      for (let i = 1; i < arr.length; i++) {
+        let d = arr[i] - arr[i - 1];
+        if (d > Math.PI) offset -= 2 * Math.PI;
+        if (d < -Math.PI) offset += 2 * Math.PI;
+        out[i] = arr[i] + offset;
+      }
+      return out;
+    }
+
+    function alignAngle(theta, ref) {
+      const offset = Math.round((theta[0] - ref[0]) / (2 * Math.PI)) * 2 * Math.PI;
+      return theta.map(v => v - offset);
+    }
+
+    function wrapPi(x) {
+      return ((x + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+    }
+
+    function smoothStep(x) {
+      const u = clamp(x, 0, 1);
+      return u * u * (3 - 2 * u);
+    }
+
+    function mulberry32(seed) {
+      let a = seed >>> 0;
+      return function() {
+        a += 0x6D2B79F5;
+        let t = a;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+
+    function randn(rng) {
+      const u = Math.max(rng(), 1e-12);
+      const v = Math.max(rng(), 1e-12);
+      return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    }
+
+    function map(v, a, b, c, d) {
+      return c + (v - a) / Math.max(b - a, 1e-12) * (d - c);
+    }
+
+    function range(arr) {
+      return [Math.min(...arr), Math.max(...arr)];
+    }
+
+    function paddedRange(arr) {
+      let lo = Math.min(...arr);
+      let hi = Math.max(...arr);
+      if (Math.abs(hi - lo) < 1e-9) { hi += 1; lo -= 1; }
+      const pad = 0.08 * (hi - lo);
+      return [lo - pad, hi + pad];
+    }
+
+    function mean(arr) {
+      return arr.reduce((s, v) => s + v, 0) / arr.length;
+    }
+
+    function rms(arr) {
+      return Math.sqrt(mean(arr.map(v => v * v)));
+    }
+
+    function min(arr) { return Math.min(...arr); }
+    function max(arr) { return Math.max(...arr); }
+    function maxAbs(arr) { return Math.max(...arr.map(v => Math.abs(v))); }
+    function deg2rad(v) { return v * Math.PI / 180; }
+    function rad2deg(v) { return v * 180 / Math.PI; }
+    function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi); }
+    function fmtDeg(v) { return `${v.toFixed(4)}°`; }
+    function shortNum(v) {
+      const av = Math.abs(v);
+      if (av >= 100) return v.toFixed(0);
+      if (av >= 10) return v.toFixed(1);
+      if (av >= 1) return v.toFixed(2);
+      return v.toFixed(3);
+    }
+
+    function scenarioName(v) {
+      return ({ constant: "恒速", variable: "变速", impact: "冲击", load: "负载扰动" })[v] || v;
+    }
+
+    function csvCell(v) {
+      const s = String(v).replace(/"/g, '""');
+      return `"${s}"`;
+    }
+
+    function downloadText(text, filename, mime) {
+      const blob = new Blob(["\ufeff", text], { type: mime });
+      const url = URL.createObjectURL(blob);
+      download(url, filename);
+      setTimeout(() => URL.revokeObjectURL(url), 500);
+    }
+
+    function download(url, filename) {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    function toast(text) {
+      const el = $("toast");
+      el.textContent = text;
+      el.classList.add("show");
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(() => el.classList.remove("show"), 1800);
+    }
+
+    function resetDefaults() {
+      const defaults = {
+        polePairs: 6, speedRpm: 100, simTime: 0.5, sampleRate: 5000, adcBits: 16, vref: 3.3, mountAngleDeg: 90,
+        enableOffset: true, enableAmp: true, enablePhase: true, enableHarm: true, enableNoise: true, enableAdc: true,
+        offsetS: 0.05, offsetC: -0.08, ampS: 1.00, ampC: 0.85, phaseDeg: 5, noiseRms: 0.010,
+        harmScale: 1, harmScaleValue: 1, lpfHz: 300, abAlpha: 0.22, abBeta: 0.018, esoHz: 60,
+        signalOrders: "2,3,5,6", angleOrders: "1,2,3,4,5,6,7,8",
+        scenario: "constant", speedRatio: 1.8, impactDeg: 2, loadDrop: 0.25, seed: 1808
+      };
+      for (const [key, value] of Object.entries(defaults)) {
+        const el = $(key);
+        if (!el) continue;
+        if (el.type === "checkbox") el.checked = value;
+        else el.value = value;
+      }
+      syncAllSliders();
+      simulate();
+      toast("已恢复默认参数");
+    }
+
+    const sliderPairs = [
+      ["speedRpmSlider", "speedRpm"],
+      ["mountAngleDegSlider", "mountAngleDeg"],
+      ["phaseDegSlider", "phaseDeg"],
+      ["noiseRmsSlider", "noiseRms"],
+      ["harmScale", "harmScaleValue"],
+      ["lpfHzSlider", "lpfHz"],
+      ["abAlphaSlider", "abAlpha"],
+      ["abBetaSlider", "abBeta"],
+      ["esoHzSlider", "esoHz"],
+      ["speedRatioSlider", "speedRatio"],
+      ["impactDegSlider", "impactDeg"],
+      ["loadDropSlider", "loadDrop"]
+    ];
+
+    function setupSyncedSliders() {
+      sliderPairs.forEach(([sliderId, valueId]) => {
+        const slider = $(sliderId);
+        const value = $(valueId);
+        if (!slider || !value) return;
+        slider.addEventListener("input", () => {
+          value.value = slider.value;
+          simulate();
+        });
+        value.addEventListener("input", () => {
+          slider.value = value.value;
+          simulate();
+        });
+      });
+      syncAllSliders();
+    }
+
+    function syncAllSliders() {
+      sliderPairs.forEach(([sliderId, valueId]) => {
+        const slider = $(sliderId);
+        const value = $(valueId);
+        if (slider && value) slider.value = value.value;
+      });
+    }
+
+    function bindEvents() {
+      $("runBtn").addEventListener("click", simulate);
+      $("resetBtn").addEventListener("click", resetDefaults);
+      $("exportPngBtn").addEventListener("click", exportDashboardPng);
+      $("exportCsvBtn").addEventListener("click", exportCsv);
+      $("exportParamBtn").addEventListener("click", exportParams);
+      $("reportPngBtn").addEventListener("click", exportDashboardPng);
+      $("reportCsvBtn").addEventListener("click", exportCsv);
+      $("reportParamBtn").addEventListener("click", exportParams);
+      setupSyncedSliders();
+      for (const id of ids) {
+        const el = $(id);
+        if (!el) continue;
+        el.addEventListener("change", simulate);
+      }
+      document.querySelectorAll(".tab").forEach(btn => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".tab").forEach(v => v.classList.remove("active"));
+          document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+          btn.classList.add("active");
+          $(btn.dataset.view).classList.add("active");
+          renderAll();
+        });
+      });
+      window.addEventListener("resize", () => {
+        clearTimeout(bindEvents._timer);
+        bindEvents._timer = setTimeout(renderAll, 120);
+      });
+      startModelAnimation();
+    }
+
+    function startModelAnimation() {
+      if (state.modelAnimReq) cancelAnimationFrame(state.modelAnimReq);
+      state.modelLastTs = 0;
+      const tick = (ts) => {
+        if (!state.modelLastTs) state.modelLastTs = ts;
+        const dt = Math.min(0.05, (ts - state.modelLastTs) / 1000);
+        state.modelLastTs = ts;
+        if (state.result) {
+          const rpm = state.result.p.speedRpm || 0;
+          const visualRps = clamp(rpm / 60, 0.05, 2.4);
+          state.modelTheta = wrapPi(state.modelTheta + visualRps * 2 * Math.PI * dt);
+          if ($("dashboard").classList.contains("active")) drawMotorModel();
+        }
+        state.modelAnimReq = requestAnimationFrame(tick);
+      };
+      state.modelAnimReq = requestAnimationFrame(tick);
+    }
+
+    bindEvents();
+    simulate();
+  </script>
+</body>
+</html>
