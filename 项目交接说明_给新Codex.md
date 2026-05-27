@@ -1,6 +1,6 @@
 # 项目交接说明：多轴手持云台与双线性 Hall 位置检测
 
-更新时间：2026-05-21  
+更新时间：2026-05-27  
 项目目录：`D:\Desktop\基于无刷电机和压电马达的多轴手机云台\BO1808 NBH2B Simulation Modeling`
 
 这份文档用于在更换账号或开启新对话后快速恢复当前协作状态。新的 AI/Codex 读取本文后，应尽量延续当前对话的协作习惯、工程上下文、文件路径、仿真路线和讲解风格。
@@ -49,7 +49,7 @@
 
 ---
 
-## 3. 当前重点：双线性 Hall 位置检测仿真
+## 3. 当前重点：双线性 Hall 位置检测与融合仿真
 
 当前主线选择：
 
@@ -57,7 +57,7 @@
 归一化 + 谐波重构 + ESO 复合信号提取
 ```
 
-当前已经完成的是前置基础仿真：
+当前已经完成的仿真链路已经从“理想 Hall 信号”推进到“接近真实采样链路和融合算法验证”：
 
 ```text
 理想正余弦信号
@@ -66,17 +66,27 @@
 -> 相位不正交误差
 -> 采样估计零偏/幅值/相位
 -> atan2 解角误差对比
+-> 2/3/5/6 次谐波注入、FFT 识别与谐波补偿
+-> ADC 量化、白噪声、一阶低通滤波
+-> 角度域 alpha-beta 估计
+-> 离散 ESO 估计
+-> Hall + Gyro 互补滤波和 Kalman 融合
+-> 0.5 / 1 / 5 rpm 低速扫角精度验证
+-> 变速、冲击、负载扰动工况
+-> 更强冲击、gyro 零偏漂移、温漂、轴间耦合和综合强扰动工况
 ```
 
-尚未完成但计划后续做：
+当前阶段的重要结论：
 
 ```text
-谐波畸变
--> 噪声和 ADC 量化
--> FFT 识别主要谐波
--> 多角公式/谐波重构补偿
--> ESO 残差估计
--> 与控制环或 IMU 融合接口
+1. 在低速准静态扫角下，当前 0.5 mV Hall 噪声设置中，Hall raw 的 1σ 约 0.0055°，略高于 ≤±0.005° 指标。
+2. alpha-beta、离散 ESO、互补滤波和 Kalman 在低速指标验证中可以压到 0.005° 以内。
+3. 电压域 LPF 虽能压高频噪声，但会引入相位滞后，在角度估计中不一定更好。
+4. alpha-beta 简单、稳定，适合作为低速角度估计基线。
+5. Hall + Gyro 互补滤波对动态跟踪更直观，适合后续云台姿态/速度融合接口。
+6. Kalman 有扩展潜力，但依赖 Q/R、gyro 零偏模型和真实 IMU 数据标定。
+7. ESO 对未建模扰动有意义，但在当前恒速+白噪声工况下优势不明显，带宽需要随工况调。
+8. 强冲击、温漂和轴间耦合下，仅靠滤波算法不能消除确定性污染，需要机械标定、轴间解耦、温度补偿和实测数据闭环。
 ```
 
 ---
@@ -91,9 +101,37 @@
 线性霍尔传感器/validate_dual_hall_ideal_sincos.m
 线性霍尔传感器/models/dual_hall_ideal_sincos.slx
 线性霍尔传感器/figures/dual_hall_ideal_sincos_validation.png
+线性霍尔传感器/init_dual_hall_noise_filter_params.m
+线性霍尔传感器/validate_dual_hall_noise_filter.m
+线性霍尔传感器/build_dual_hall_discrete_eso_model.m
+线性霍尔传感器/models/dual_hall_discrete_eso.slx
+线性霍尔传感器/build_dual_hall_harmonic_baseline_model.m
+线性霍尔传感器/validate_dual_hall_harmonic_fft_compensation.m
+线性霍尔传感器/init_dual_hall_harmonic_params.m
+线性霍尔传感器/LPF_alpha-beta_ESO原理与Simulink实现说明.md
 线性霍尔传感器/双线性霍尔位置检测方案规划与学习路线.md
 线性霍尔传感器/线性霍尔高精度位置检测与补偿方法章节.md
 线性霍尔传感器/README.md
+```
+
+当前最重要的验证入口是：
+
+```matlab
+cd('D:/Desktop/基于无刷电机和压电马达的多轴手机云台/BO1808 NBH2B Simulation Modeling/线性霍尔传感器')
+validate_dual_hall_noise_filter
+```
+
+该脚本会生成低速精度、噪声/滤波、动态扰动、Hall+Gyro 融合和强扰动工况的主要结果图与 CSV 指标。
+
+近期关键输出文件：
+
+```text
+线性霍尔传感器/figures/dual_hall_noise_lpf_ab_eso_validation.png
+线性霍尔传感器/figures/dual_hall_low_speed_detection_validation.png
+线性霍尔传感器/figures/dual_hall_dynamic_conditions_validation.png
+线性霍尔传感器/figures/dual_hall_gyro_fusion_validation.png
+线性霍尔传感器/figures/dual_hall_stress_conditions_validation.png
+线性霍尔传感器/figures/dual_hall_stress_conditions_metrics.csv
 ```
 
 线性 Hall 参考资料：
@@ -514,42 +552,36 @@ File: Revert File
 
 ## 12. 用户下一步建议
 
-当前建议下一步做：
+当前建议下一步做的是“从仿真验证转向实测标定和工程闭环”，而不是继续只堆滤波算法。
+
+优先级建议：
 
 ```text
-加入谐波畸变
+1. 固定当前低速精度、噪声滤波、动态扰动和强扰动仿真的基准版本。
+2. 整理 Git 工作区：决定哪些结果图/CSV 需要纳入版本管理，哪些只是临时输出。
+3. 做实机标定流程设计：低速扫角采集 Hall 原始值，同步参考角度，估计零偏、幅值、相位和谐波参数。
+4. 做查表/LUT 或分段补偿验证，用实测角度残差建立补偿表。
+5. 加入温度维度：验证 Hall 零偏、幅值、相位和 gyro bias 随温度变化的影响。
+6. 加入 IMU 实测或更真实的 IMU 噪声/零偏模型，继续验证 Hall + Gyro 互补滤波/Kalman。
+7. 建立多轴耦合接口：用安装矩阵或耦合矩阵描述各级大角度转动下的轴间影响。
+8. 将检测精度、动态误差和云台控制指标关联起来，例如像素抖动、姿态保持误差、抗冲击恢复时间。
 ```
 
-原因：
+已经完成但仍可作为历史基线保留的内容：
 
 ```text
-零偏、幅值、相位属于低阶几何误差。
-实际 Hall 信号还会受到磁钢不均匀、偏心、安装误差和电磁干扰影响，表现为二次、三次或更高次谐波。
+理想正余弦、零偏、幅值不一致、相位不正交、谐波畸变、FFT 识别、谐波补偿、
+ADC 量化、白噪声、电压 LPF、alpha-beta、离散 ESO、互补滤波、Kalman、
+低速扫角、变速、冲击、负载扰动、强冲击、温漂、gyro 漂移和轴间耦合。
 ```
 
-建议仿真模型：
-
-```math
-H_s = V_{0s}+A_s\sin\theta
-+\sum_{k=2}^{N}[a_{s,k}\sin(k\theta)+b_{s,k}\cos(k\theta)]
-+n_s
-```
-
-```math
-H_c = V_{0c}+A_c\cos(\theta+\Delta\phi)
-+\sum_{k=2}^{N}[a_{c,k}\sin(k\theta)+b_{c,k}\cos(k\theta)]
-+n_c
-```
-
-建议顺序：
+近期最值得汇报的工程结论：
 
 ```text
-1. 加入二次谐波和三次谐波。
-2. 观察相图圆边出现波纹。
-3. 观察 atan2 解角误差出现更高频周期分量。
-4. 用 FFT 找主要谐波。
-5. 用多角公式重构并抵消主要谐波。
-6. 再考虑噪声和 ESO 残差估计。
+1. 低速准静态场景中，线性 Hall 方案具备达到 ≤±0.005° @1σ 的可能性，但依赖噪声、幅值、ADC、标定和机械装配质量。
+2. 仅调滤波器不能解决结构冲击、温漂和轴间耦合带来的确定性误差。
+3. Hall 负责轴/关节相对角度，Gyro 负责高频角速度和动态响应，两者不是重复传感器，而是互补信息源。
+4. 下一阶段应把“离线标定参数 + 在线融合算法 + 多轴耦合补偿”组合起来验证。
 ```
 
 ---
@@ -570,7 +602,12 @@ D:\Desktop\基于无刷电机和压电马达的多轴手机云台\BO1808 NBH2B S
 线性霍尔传感器/validate_dual_hall_ideal_sincos.m
 线性霍尔传感器/models/dual_hall_ideal_sincos.slx
 
-下一步准备做谐波畸变、FFT 谐波识别、谐波重构补偿、噪声和 ESO 残差估计。请接着当前风格继续帮助我完成项目。
+当前主验证脚本已经推进到：
+线性霍尔传感器/validate_dual_hall_noise_filter.m
+线性霍尔传感器/init_dual_hall_noise_filter_params.m
+线性霍尔传感器/LPF_alpha-beta_ESO原理与Simulink实现说明.md
+
+已完成内容包括：谐波畸变与 FFT/谐波补偿、ADC 量化、白噪声、电压 LPF、角度域 alpha-beta、离散 ESO、Hall+Gyro 互补滤波、Kalman、0.5/1/5 rpm 低速扫角精度验证、变速/冲击/负载扰动，以及强冲击、gyro 零偏漂移、温漂、轴间耦合等强扰动工况。下一步不是重新做谐波，而是做实测标定、查表/温度补偿、真实 IMU 融合和多轴耦合验证。请接着当前风格继续帮助我完成项目。
 ```
 
 ---
@@ -581,6 +618,13 @@ D:\Desktop\基于无刷电机和压电马达的多轴手机云台\BO1808 NBH2B S
 
 ```matlab
 validate_dual_hall_ideal_sincos
+```
+
+运行当前主线性 Hall 噪声、滤波、融合和强扰动验证：
+
+```matlab
+cd('D:/Desktop/基于无刷电机和压电马达的多轴手机云台/BO1808 NBH2B Simulation Modeling/线性霍尔传感器')
+validate_dual_hall_noise_filter
 ```
 
 如果 MATLAB 还在用旧函数缓存：
@@ -611,5 +655,4 @@ build_dual_hall_ideal_sincos_model(true)
 - MATLAB 运行后可能生成 `slprj`、`.slxc`、`.autosave`，这些是缓存文件，可清理，但不要误删源码、模型和结果图。
 - 如果用户截图中显示文件没有更新，先检查磁盘文件，再考虑 VS Code 缓冲区问题。
 - 如果用户问“这一页能不能说清楚”，优先给“可改点 + 一段式讲述文案”。
-- 如果用户问“下一步做什么”，当前推荐是“谐波畸变与 FFT 识别”。
-
+- 如果用户问“下一步做什么”，当前推荐是“实测标定、查表/温度补偿、真实 IMU 融合和多轴耦合验证”。

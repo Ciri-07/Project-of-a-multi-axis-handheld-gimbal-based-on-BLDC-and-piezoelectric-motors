@@ -24,6 +24,16 @@ if ~exist(figDir, 'dir')
     mkdir(figDir);
 end
 
+% 统一各方法在所有图中的颜色：曲线图和柱状图保持一致
+colorHallRaw = [0.0000 0.4470 0.7410];
+colorAngleLpf = [0.3010 0.7450 0.9330];
+colorAlphaBeta = [0.8500 0.3250 0.0980];
+colorDiscreteEso = [0.9290 0.6940 0.1250];
+colorGyroIntegration = [0.4500 0.4500 0.4500];
+colorComplementary = [0.4940 0.1840 0.5560];
+colorKalman = [0.4660 0.6740 0.1880];
+colorTarget = [0.8500 0.1000 0.1000];
+
 %% 生成无噪声基准 Hall 信号
 t = (0:hall_ts_sim_s:hall_t_stop_s).';
 theta_m = hall_omega_mech_rad_s*t;
@@ -50,6 +60,8 @@ hall_c_filt_v = first_order_lpf(hall_c_noisy_adc_v, hall_lpf_alpha);%调用lpffu
 
 %% 用无噪声数据建立固定离线补偿系数
 cal = estimate_baseline_calibration(hall_s_clean_v, hall_c_clean_v, theta_mag, calib_idx, P);
+result_clean_for_lut = apply_compensation_chain(hall_s_clean_v, hall_c_clean_v, theta_mag, cal, P);
+cal.residual_lut = build_residual_lut(result_clean_for_lut.theta_anglecomp, theta_mag, calib_idx);
 
 %% 对不同采样链路执行同一套确定性补偿
 result_clean = apply_compensation_chain(hall_s_clean_v, hall_c_clean_v, theta_mag, cal, P);
@@ -80,16 +92,17 @@ dynScenarioIds = ["variable_speed"; "impact"; "load_disturbance"];
 dynScenarioLabels = ["Variable speed"; "Impact vibration"; "Load disturbance"];
 dynMethodLabels = ["Raw"; "Angle LPF"; "Alpha-beta"; "Discrete ESO"];
 dynLineColors = [
-    0.80 0.10 0.10
-    0.10 0.25 0.90
-    0.00 0.55 0.20
-    0.55 0.00 0.75
+    colorHallRaw
+    colorAngleLpf
+    colorAlphaBeta
+    colorDiscreteEso
 ];
+dynPlotMethodIdx = [1 3 4];  % Hide Angle LPF in figures; it stretches the axis scale.
 
 esoBandwidthCandidatesHz = [20 30 40 50 60 70 80 100 120 150];
 [hall_eso_bandwidth_hz, esoSweepTable] = tune_eso_bandwidth( ...
     esoBandwidthCandidatesHz, hall_ts_sim_s, ...
-    result_noisy.theta_anglecomp, theta_mag, calib_idx, ...
+    result_noisy.theta_lutcomp, theta_mag, calib_idx, ...
     dyn_t, dyn_metric_idx, dynScenarioIds, P.pole_pairs, hall_theta0_rad, hall_noise_seed);
 [hall_eso_beta1, hall_eso_beta2, hall_eso_beta3, hall_eso_omega_o_rad_s] = ...
     eso_gains_from_bandwidth(hall_eso_bandwidth_hz);
@@ -98,45 +111,8 @@ esoSweepCsvPath = fullfile(figDir, 'dual_hall_eso_bandwidth_sweep.csv');
 writetable(esoSweepTable, esoSweepCsvPath);
 prepend_utf8_bom(esoSweepCsvPath);
 
-esoSweepFig = figure('Name', 'Dual Hall ESO Bandwidth Sweep', ...
-    'Color', 'w', 'Position', [150 150 980 420]);
-tiledlayout(esoSweepFig, 1, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
-
-nexttile
-plot(esoSweepTable.bandwidth_hz, esoSweepTable.steady_rms_deg, '-o', 'LineWidth', 1.1)
-hold on
-plot(esoSweepTable.bandwidth_hz, esoSweepTable.dynamic_mean_rms_deg, '-s', 'LineWidth', 1.1)
-xline(hall_eso_bandwidth_hz, '--k', 'LineWidth', 1.0)
-grid on
-xlabel('ESO bandwidth / Hz')
-ylabel('RMS angle error / deg')
-title('(a) RMS error versus ESO bandwidth')
-legend(["steady noise", "dynamic mean", "selected"], 'Location', 'best')
-
-nexttile
-plot(esoSweepTable.bandwidth_hz, esoSweepTable.score_deg, '-o', 'LineWidth', 1.1)
-hold on
-xline(hall_eso_bandwidth_hz, '--k', 'LineWidth', 1.0)
-grid on
-xlabel('ESO bandwidth / Hz')
-ylabel('composite score / deg')
-title('(b) composite score for bandwidth selection')
-legend(["score", "selected"], 'Location', 'best')
-
-axs = findall(esoSweepFig, 'Type', 'Axes');
-for ax = reshape(axs, 1, [])
-    try
-        ax.Toolbar.Visible = 'off';
-    catch
-    end
-    try
-        disableDefaultInteractivity(ax);
-    catch
-    end
-end
-
-esoSweepPngPath = fullfile(figDir, 'dual_hall_eso_bandwidth_sweep.png');
-exportgraphics(esoSweepFig, esoSweepPngPath, 'Resolution', 220);
+% Keep ESO bandwidth sweep data in CSV, but do not export a figure by default.
+% The sweep is a tuning aid; later figures focus on the estimator comparison.
 
 %% discrete ESO angle estimator after Hall angle decoding
 % ESO estimates z1=angle, z2=angular speed and z3=total disturbance.
@@ -355,7 +331,7 @@ for s = 1:numel(dynData)
 
     nexttile
     hold on
-    for m = 1:numel(dynMethodLabels)
+    for m = dynPlotMethodIdx
         plot(dyn_t(dyn_plot_idx), rad2deg(data.errors{m}(dyn_plot_idx)), ...
             'Color', dynLineColors(m,:), 'LineWidth', 0.9)
     end
@@ -364,16 +340,17 @@ for s = 1:numel(dynData)
     ylabel('Angle error / deg')
     title(sprintf('(%c2) angle-estimation error', char('a' + s - 1)))
     if s == 1
-        legend(dynMethodLabels, 'Location', 'southoutside', 'NumColumns', 4)
+        legend(dynMethodLabels(dynPlotMethodIdx), 'Location', 'southoutside', 'NumColumns', 3)
     end
 
     nexttile
-    plot(dyn_t(dyn_plot_idx), data.disturbance_eso(dyn_plot_idx), ...
+    esoDistPlotIdx = dyn_plot_idx & dyn_t >= 0.05;
+    plot(dyn_t(esoDistPlotIdx), data.disturbance_eso(esoDistPlotIdx), ...
         'Color', [0.55 0.00 0.75], 'LineWidth', 1.0)
     grid on
     xlabel('Time / s')
     ylabel('z_3 / rad*s^{-2}')
-    title(sprintf('(%c3) ESO disturbance estimate', char('a' + s - 1)))
+    title(sprintf('(%c3) ESO disturbance estimate after startup', char('a' + s - 1)))
 end
 
 axs = findall(dynFig, 'Type', 'Axes');
@@ -395,33 +372,40 @@ dynMetricFig = figure('Name', 'Dual Hall Dynamic Conditions Metrics', ...
     'Color', 'w', 'Position', [120 120 1050 520]);
 tiledlayout(dynMetricFig, 1, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
 
-dynMaxMat = zeros(numel(dynScenarioLabels), numel(dynMethodLabels));
-dynRmsMat = zeros(numel(dynScenarioLabels), numel(dynMethodLabels));
+dynMaxMat = zeros(numel(dynScenarioLabels), numel(dynPlotMethodIdx));
+dynRmsMat = zeros(numel(dynScenarioLabels), numel(dynPlotMethodIdx));
 for s = 1:numel(dynScenarioLabels)
-    for m = 1:numel(dynMethodLabels)
+    for col = 1:numel(dynPlotMethodIdx)
+        m = dynPlotMethodIdx(col);
         row = dynMetrics.scenario_label == dynScenarioLabels(s) & dynMetrics.method == dynMethodLabels(m);
-        dynMaxMat(s,m) = dynMetrics.max_error_deg(row);
-        dynRmsMat(s,m) = dynMetrics.rms_error_deg(row);
+        dynMaxMat(s,col) = dynMetrics.max_error_deg(row);
+        dynRmsMat(s,col) = dynMetrics.rms_error_deg(row);
     end
 end
 
 nexttile
-bar(dynMaxMat)
+bDynMax = bar(dynMaxMat);
+for ii = 1:numel(bDynMax)
+    bDynMax(ii).FaceColor = dynLineColors(dynPlotMethodIdx(ii),:);
+end
 grid on
 set(gca, 'XTickLabel', dynScenarioLabels)
 xtickangle(15)
 ylabel('Max angle error / deg')
 title('(a) Maximum error under dynamic conditions')
-legend(dynMethodLabels, 'Location', 'northoutside', 'NumColumns', 4)
+legend(dynMethodLabels(dynPlotMethodIdx), 'Location', 'northoutside', 'NumColumns', 3)
 
 nexttile
-bar(dynRmsMat)
+bDynRms = bar(dynRmsMat);
+for ii = 1:numel(bDynRms)
+    bDynRms(ii).FaceColor = dynLineColors(dynPlotMethodIdx(ii),:);
+end
 grid on
 set(gca, 'XTickLabel', dynScenarioLabels)
 xtickangle(15)
 ylabel('RMS angle error / deg')
 title('(b) RMS error under dynamic conditions')
-legend(dynMethodLabels, 'Location', 'northoutside', 'NumColumns', 4)
+legend(dynMethodLabels(dynPlotMethodIdx), 'Location', 'northoutside', 'NumColumns', 3)
 
 dynMetricsPngPath = fullfile(figDir, 'dual_hall_dynamic_conditions_metrics.png');
 exportgraphics(dynMetricFig, dynMetricsPngPath, 'Resolution', 220);
@@ -452,13 +436,14 @@ fusionMethodLabels = [
     "Kalman"
 ];
 fusionLineColors = [
-    0.80 0.10 0.10
-    0.00 0.55 0.20
-    0.55 0.00 0.75
-    0.45 0.45 0.45
-    0.10 0.25 0.90
-    0.00 0.00 0.00
+    colorHallRaw
+    colorAlphaBeta
+    colorDiscreteEso
+    colorGyroIntegration
+    colorComplementary
+    colorKalman
 ];
+fusionPlotMethodIdx = [1 2 5 6];  % Focus the validation plot on key Hall/Gyro methods.
 
 fusionMetrics = table('Size', [0 5], ...
     'VariableTypes', {'string', 'string', 'string', 'double', 'double'}, ...
@@ -539,7 +524,7 @@ for s = 1:numel(fusionData)
 
     nexttile
     hold on
-    for m = 1:numel(fusionMethodLabels)
+    for m = fusionPlotMethodIdx
         plot(dyn_t(dyn_plot_idx), rad2deg(data.errors{m}(dyn_plot_idx)), ...
             'Color', fusionLineColors(m,:), 'LineWidth', 0.9)
     end
@@ -548,12 +533,12 @@ for s = 1:numel(fusionData)
     ylabel('Angle error / deg')
     title(sprintf('(%c2) Hall/Gyro fusion angle error', char('a' + s - 1)))
     if s == 1
-        legend(fusionMethodLabels, 'Location', 'southoutside', 'NumColumns', 3)
+        legend(fusionMethodLabels(fusionPlotMethodIdx), 'Location', 'southoutside', 'NumColumns', 2)
     end
 
     nexttile
     plot(dyn_t(dyn_plot_idx), rad2deg(data.gyro_bias_hat(dyn_plot_idx)), ...
-        'Color', [0.00 0.00 0.00], 'LineWidth', 1.0)
+        'Color', colorKalman, 'LineWidth', 1.0)
     hold on
     plot(dyn_t(dyn_plot_idx), rad2deg( ...
         hall_gyro_bias_rad_s + hall_gyro_bias_drift_rad_s2*dyn_t(dyn_plot_idx)), ...
@@ -597,23 +582,35 @@ for s = 1:numel(dynScenarioLabels)
     end
 end
 
+fusionMetricMethodIdx = [1 2 3 5 6];  % Exclude pure gyro integration from summary bars.
+fusionMaxPlotMat = fusionMaxMat(:, fusionMetricMethodIdx);
+fusionRmsPlotMat = fusionRmsMat(:, fusionMetricMethodIdx);
+fusionMetricLabels = fusionMethodLabels(fusionMetricMethodIdx);
+fusionMetricColors = fusionLineColors(fusionMetricMethodIdx,:);
+
 nexttile
-bar(fusionMaxMat)
+bFusionMax = bar(fusionMaxPlotMat);
+for ii = 1:numel(bFusionMax)
+    bFusionMax(ii).FaceColor = fusionMetricColors(ii,:);
+end
 grid on
 set(gca, 'XTickLabel', dynScenarioLabels)
 xtickangle(15)
 ylabel('Max angle error / deg')
 title('(a) Maximum error: Hall-only versus Hall/Gyro fusion')
-legend(fusionMethodLabels, 'Location', 'northoutside', 'NumColumns', 3)
+legend(fusionMetricLabels, 'Location', 'northoutside', 'NumColumns', 3)
 
 nexttile
-bar(fusionRmsMat)
+bFusionRms = bar(fusionRmsPlotMat);
+for ii = 1:numel(bFusionRms)
+    bFusionRms(ii).FaceColor = fusionMetricColors(ii,:);
+end
 grid on
 set(gca, 'XTickLabel', dynScenarioLabels)
 xtickangle(15)
 ylabel('RMS angle error / deg')
 title('(b) RMS error: Hall-only versus Hall/Gyro fusion')
-legend(fusionMethodLabels, 'Location', 'northoutside', 'NumColumns', 3)
+legend(fusionMetricLabels, 'Location', 'northoutside', 'NumColumns', 3)
 
 fusionMetricsPngPath = fullfile(figDir, 'dual_hall_gyro_fusion_metrics.png');
 exportgraphics(fusionMetricFig, fusionMetricsPngPath, 'Resolution', 220);
@@ -641,6 +638,7 @@ low_plot_idx = low_t <= min(5, hall_low_speed_t_stop_s);
 low_metric_idx = low_t >= hall_low_speed_metric_start_s;
 
 lowMethodLabels = fusionMethodLabels;
+lowPlotMethodIdx = [1 2 3 5 6];  % Hide Gyro integration in low-speed figures.
 lowMetrics = table('Size', [0 7], ...
     'VariableTypes', {'double', 'string', 'double', 'double', 'double', 'double', 'logical'}, ...
     'VariableNames', {'sweep_rpm', 'method', 'mean_error_deg', 'sigma_1deg', ...
@@ -662,7 +660,7 @@ for s = 1:numel(hall_low_speed_sweep_rpm)
 
     resultLow = apply_compensation_chain( ...
         hall_s_low_noisy_adc_v, hall_c_low_noisy_adc_v, thetaMagLow, cal, P);
-    thetaHall = align_angle((resultLow.theta_anglecomp - hall_theta0_rad)/P.pole_pairs, thetaTrue);
+    thetaHall = align_angle((resultLow.theta_lutcomp - hall_theta0_rad)/P.pole_pairs, thetaTrue);
 
     [thetaAbLow, ~] = alpha_beta_filter(thetaHall, hall_low_speed_ts_s, hall_ab_alpha, hall_ab_beta);
     [thetaEsoLow, ~, ~] = discrete_eso_filter( ...
@@ -722,7 +720,7 @@ prepend_utf8_bom(lowCsvPath);
 
 lowPlotCase = min(2, numel(lowData));
 lowFig = figure('Name', 'Dual Hall Low-Speed Detection Accuracy Validation', ...
-    'Color', 'w', 'Position', [60 60 1350 780]);
+    'Color', 'w', 'Position', [60 60 1350 760]);
 tiledlayout(lowFig, 2, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
 
 nexttile
@@ -739,48 +737,51 @@ legend('clean', 'ADC + noise', 'Location', 'southoutside', 'NumColumns', 2)
 
 nexttile
 hold on
-for m = 1:numel(lowMethodLabels)
-    plot(low_t(low_plot_idx), rad2deg(lowData(lowPlotCase).errors{m}(low_plot_idx)), ...
-        'Color', fusionLineColors(m,:), 'LineWidth', 0.9)
+targetBandX = [low_t(find(low_plot_idx, 1, 'first')) low_t(find(low_plot_idx, 1, 'last')) ...
+    low_t(find(low_plot_idx, 1, 'last')) low_t(find(low_plot_idx, 1, 'first'))];
+targetBandY = [-hall_detection_sigma_target_deg -hall_detection_sigma_target_deg ...
+    hall_detection_sigma_target_deg hall_detection_sigma_target_deg];
+patch(targetBandX, targetBandY, [0.88 0.88 0.88], ...
+    'EdgeColor', 'none', 'FaceAlpha', 0.55, 'HandleVisibility', 'off')
+hLowLines = gobjects(numel(lowPlotMethodIdx), 1);
+for ii = 1:numel(lowPlotMethodIdx)
+    m = lowPlotMethodIdx(ii);
+    hLowLines(ii) = plot(low_t(low_plot_idx), rad2deg(lowData(lowPlotCase).errors{m}(low_plot_idx)), ...
+        'Color', fusionLineColors(m,:), 'LineWidth', 0.9);
 end
-yline(hall_detection_sigma_target_deg, '--', 'Color', [0.3 0.3 0.3], 'LineWidth', 0.9)
-yline(-hall_detection_sigma_target_deg, '--', 'Color', [0.3 0.3 0.3], 'LineWidth', 0.9)
+hTarget = yline(hall_detection_sigma_target_deg, '--', 'Color', colorTarget, 'LineWidth', 0.9);
+yline(-hall_detection_sigma_target_deg, '--', 'Color', colorTarget, ...
+    'LineWidth', 0.9, 'HandleVisibility', 'off')
 grid on
 xlabel('Time / s')
 ylabel('Angle error / deg')
 title(sprintf('(b) %.1f rpm angle error, target band shown', lowData(lowPlotCase).rpm))
-legend([lowMethodLabels; "±0.005 deg"], 'Location', 'southoutside', 'NumColumns', 3)
+legend([hLowLines; hTarget], [lowMethodLabels(lowPlotMethodIdx); "±0.005 deg"], ...
+    'Location', 'southoutside', 'NumColumns', 3)
 
-lowSigmaMat = zeros(numel(hall_low_speed_sweep_rpm), numel(lowMethodLabels));
-lowMaxMat = zeros(numel(hall_low_speed_sweep_rpm), numel(lowMethodLabels));
+lowSigmaMat = zeros(numel(hall_low_speed_sweep_rpm), numel(lowPlotMethodIdx));
 for s = 1:numel(hall_low_speed_sweep_rpm)
-    for m = 1:numel(lowMethodLabels)
+    for col = 1:numel(lowPlotMethodIdx)
+        m = lowPlotMethodIdx(col);
         row = lowMetrics.sweep_rpm == hall_low_speed_sweep_rpm(s) & ...
             lowMetrics.method == lowMethodLabels(m);
-        lowSigmaMat(s,m) = lowMetrics.sigma_1deg(row);
-        lowMaxMat(s,m) = lowMetrics.max_abs_error_deg(row);
+        lowSigmaMat(s,col) = lowMetrics.sigma_1deg(row);
     end
 end
 
-nexttile
-bar(lowSigmaMat)
+nexttile([1 2])
+bLowSigma = bar(lowSigmaMat);
+for ii = 1:numel(bLowSigma)
+    bLowSigma(ii).FaceColor = fusionLineColors(lowPlotMethodIdx(ii),:);
+end
 hold on
-yline(hall_detection_sigma_target_deg, '--r', 'LineWidth', 1.2)
+yline(hall_detection_sigma_target_deg, '--', 'Color', colorTarget, 'LineWidth', 1.2)
 grid on
 set(gca, 'XTickLabel', string(hall_low_speed_sweep_rpm) + " rpm")
 xtickangle(15)
 ylabel('1\sigma / deg')
 title('(c) Detection precision: standard deviation')
-legend([lowMethodLabels; "target"], 'Location', 'northoutside', 'NumColumns', 3)
-
-nexttile
-bar(lowMaxMat)
-grid on
-set(gca, 'XTickLabel', string(hall_low_speed_sweep_rpm) + " rpm")
-xtickangle(15)
-ylabel('Max abs error / deg')
-title('(d) Maximum absolute error during low-speed sweep')
-legend(lowMethodLabels, 'Location', 'northoutside', 'NumColumns', 3)
+legend([lowMethodLabels(lowPlotMethodIdx); "target"], 'Location', 'northoutside', 'NumColumns', 3)
 
 axs = findall(lowFig, 'Type', 'Axes');
 for ax = reshape(axs, 1, [])
@@ -812,6 +813,233 @@ for k = 1:height(lowMetrics)
 end
 fprintf('\nSaved low-speed detection figure:\n%s\n', lowPngPath);
 fprintf('Saved low-speed detection metrics:\n%s\n', lowCsvPath);
+
+%% Stress-condition validation: stronger impact, gyro drift, thermal drift and axis coupling
+% 这一段用于把当前仿真从“普通动态工况”推到更接近项目风险项的压力工况：
+% 1. 1.6G 等级冲击可等效为短时安装柔性/结构振动带来的角度污染；
+% 2. Gyro 零偏漂移用于模拟 IMU 温漂和长时间积分漂移；
+% 3. Hall 温漂用于模拟传感器零点和灵敏度随温度变化；
+% 4. 轴间耦合用于模拟三级级联云台中相邻轴运动投影到当前轴测量。
+stress_t_stop_s = 2.0;
+stress_t = (0:hall_ts_sim_s:stress_t_stop_s).';
+stress_plot_idx = stress_t <= 1.4;
+stress_metric_idx = stress_t >= 0.10;
+
+stressScenarioIds = [
+    "strong_impact";
+    "gyro_temp_drift";
+    "axis_coupling";
+    "combined_stress"
+];
+stressScenarioLabels = [
+    "Strong impact";
+    "Gyro drift + thermal drift";
+    "Axis coupling";
+    "Combined stress"
+];
+stressMethodLabels = ["Hall raw"; "Alpha-beta"; "Discrete ESO"; "Complementary"; "Kalman"];
+stressLineColors = [
+    colorHallRaw
+    colorAlphaBeta
+    colorDiscreteEso
+    colorComplementary
+    colorKalman
+];
+
+stressMetrics = table('Size', [0 6], ...
+    'VariableTypes', {'string', 'string', 'string', 'string', 'double', 'double'}, ...
+    'VariableNames', {'scenario_id', 'scenario_label', 'stress_note', 'method', ...
+    'max_error_deg', 'rms_error_deg'});
+stressData = struct([]);
+
+for s = 1:numel(stressScenarioIds)
+    stress = make_stress_scenario(stressScenarioIds(s), stress_t, ...
+        hall_pole_pairs, hall_theta0_rad, hall_noise_seed + 700 + s);
+
+    thetaMagStress = hall_pole_pairs*stress.theta_sensor + hall_theta0_rad;
+    [hall_s_stress_clean_v, hall_c_stress_clean_v] = generate_clean_hall_signal(thetaMagStress, P);
+    [hall_s_stress_drift_v, hall_c_stress_drift_v] = apply_hall_temperature_drift( ...
+        hall_s_stress_clean_v, hall_c_stress_clean_v, stress.temperature_c, P);
+
+    rng(hall_noise_seed + 800 + s);
+    hall_s_stress_adc_v = adc_quantize( ...
+        hall_s_stress_drift_v + hall_noise_rms_v*randn(size(stress_t)), P);
+    hall_c_stress_adc_v = adc_quantize( ...
+        hall_c_stress_drift_v + hall_noise_rms_v*randn(size(stress_t)), P);
+
+    resultStress = apply_compensation_chain( ...
+        hall_s_stress_adc_v, hall_c_stress_adc_v, ...
+        hall_pole_pairs*stress.theta_true + hall_theta0_rad, cal, P);
+    thetaHallStress = align_angle((resultStress.theta_lutcomp - hall_theta0_rad)/P.pole_pairs, ...
+        stress.theta_true);
+
+    [thetaAbStress, ~] = alpha_beta_filter(thetaHallStress, hall_ts_sim_s, ...
+        hall_ab_alpha, hall_ab_beta);
+    [thetaEsoStress, ~, ~] = discrete_eso_filter(thetaHallStress, hall_ts_sim_s, ...
+        hall_eso_beta1, hall_eso_beta2, hall_eso_beta3);
+
+    gyroStress = make_gyro_measurement( ...
+        stress.omega_true, stress_t, ...
+        stress.gyro_bias_rad_s, stress.gyro_bias_drift_rad_s2, ...
+        stress.gyro_noise_rms_rad_s, hall_noise_seed + 900 + s);
+    gyroStress = gyroStress + stress.gyro_extra_rad_s;
+
+    thetaCompStress = complementary_hall_gyro_filter(thetaHallStress, gyroStress, ...
+        hall_ts_sim_s, hall_comp_alpha);
+    [thetaKalmanStress, gyroBiasHatStress] = kalman_hall_gyro_filter( ...
+        thetaHallStress, gyroStress, hall_ts_sim_s, ...
+        hall_kalman_q_angle, hall_kalman_q_bias, hall_kalman_r_hall);
+
+    thetaAbStress = align_angle(thetaAbStress, stress.theta_true);
+    thetaEsoStress = align_angle(thetaEsoStress, stress.theta_true);
+    thetaCompStress = align_angle(thetaCompStress, stress.theta_true);
+    thetaKalmanStress = align_angle(thetaKalmanStress, stress.theta_true);
+
+    stressEstimates = {
+        thetaHallStress;
+        thetaAbStress;
+        thetaEsoStress;
+        thetaCompStress;
+        thetaKalmanStress
+    };
+
+    stressErrors = cell(size(stressEstimates));
+    for m = 1:numel(stressMethodLabels)
+        stressErrors{m} = wrap_pi(stressEstimates{m} - stress.theta_true);
+        errDeg = rad2deg(stressErrors{m}(stress_metric_idx));
+        newRow = table( ...
+            stressScenarioIds(s), stressScenarioLabels(s), stress.note, ...
+            stressMethodLabels(m), max(abs(errDeg)), rms_local(errDeg), ...
+            'VariableNames', {'scenario_id', 'scenario_label', 'stress_note', ...
+            'method', 'max_error_deg', 'rms_error_deg'});
+        stressMetrics = [stressMetrics; newRow]; %#ok<AGROW>
+    end
+
+    stressData(s).id = stressScenarioIds(s);
+    stressData(s).label = stressScenarioLabels(s);
+    stressData(s).note = stress.note;
+    stressData(s).theta_true = stress.theta_true;
+    stressData(s).omega_true = stress.omega_true;
+    stressData(s).theta_sensor = stress.theta_sensor;
+    stressData(s).temperature_c = stress.temperature_c;
+    stressData(s).gyro = gyroStress;
+    stressData(s).gyro_bias_true = stress.gyro_bias_rad_s + ...
+        stress.gyro_bias_drift_rad_s2*(stress_t - stress_t(1));
+    stressData(s).gyro_bias_hat = gyroBiasHatStress;
+    stressData(s).stress_angle = stress.theta_sensor - stress.theta_true;
+    stressData(s).estimates = stressEstimates;
+    stressData(s).errors = stressErrors;
+end
+
+stressCsvPath = fullfile(figDir, 'dual_hall_stress_conditions_metrics.csv');
+writetable(stressMetrics, stressCsvPath);
+prepend_utf8_bom(stressCsvPath);
+
+stressFig = figure('Name', 'Dual Hall Stress Conditions Validation', ...
+    'Color', 'w', 'Position', [40 40 1450 900]);
+tiledlayout(stressFig, numel(stressData), 2, 'TileSpacing', 'compact', 'Padding', 'compact');
+
+for s = 1:numel(stressData)
+    data = stressData(s);
+
+    nexttile
+    yyaxis left
+    plot(stress_t(stress_plot_idx), data.omega_true(stress_plot_idx)*60/(2*pi), ...
+        'k', 'LineWidth', 1.0)
+    ylabel('Speed / rpm')
+    yyaxis right
+    plot(stress_t(stress_plot_idx), rad2deg(data.stress_angle(stress_plot_idx)), ...
+        'Color', colorTarget, 'LineWidth', 0.9)
+    ylabel('Injected angle / deg')
+    grid on
+    xlabel('Time / s')
+    title(sprintf('(%c1) %s input stress', char('a' + s - 1), data.label))
+    if s == 1
+        legend('speed', 'equiv. angle stress', 'Location', 'southoutside', 'NumColumns', 2)
+    end
+
+    nexttile
+    hold on
+    for m = 1:numel(stressMethodLabels)
+        plot(stress_t(stress_plot_idx), rad2deg(data.errors{m}(stress_plot_idx)), ...
+            'Color', stressLineColors(m,:), 'LineWidth', 0.85)
+    end
+    grid on
+    xlabel('Time / s')
+    ylabel('Angle error / deg')
+    title(sprintf('(%c2) estimator error under stress', char('a' + s - 1)))
+    if s == 1
+        legend(stressMethodLabels, 'Location', 'southoutside', 'NumColumns', 3)
+    end
+end
+
+axs = findall(stressFig, 'Type', 'Axes');
+for ax = reshape(axs, 1, [])
+    try
+        ax.Toolbar.Visible = 'off';
+    catch
+    end
+    try
+        disableDefaultInteractivity(ax);
+    catch
+    end
+end
+
+stressPngPath = fullfile(figDir, 'dual_hall_stress_conditions_validation.png');
+exportgraphics(stressFig, stressPngPath, 'Resolution', 220);
+
+stressMetricFig = figure('Name', 'Dual Hall Stress Conditions Metrics', ...
+    'Color', 'w', 'Position', [120 120 1250 560]);
+tiledlayout(stressMetricFig, 1, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
+
+stressMaxMat = zeros(numel(stressScenarioLabels), numel(stressMethodLabels));
+stressRmsMat = zeros(numel(stressScenarioLabels), numel(stressMethodLabels));
+for s = 1:numel(stressScenarioLabels)
+    for m = 1:numel(stressMethodLabels)
+        row = stressMetrics.scenario_label == stressScenarioLabels(s) & ...
+            stressMetrics.method == stressMethodLabels(m);
+        stressMaxMat(s,m) = stressMetrics.max_error_deg(row);
+        stressRmsMat(s,m) = stressMetrics.rms_error_deg(row);
+    end
+end
+
+nexttile
+bStressMax = bar(stressMaxMat);
+for ii = 1:numel(bStressMax)
+    bStressMax(ii).FaceColor = stressLineColors(ii,:);
+end
+grid on
+set(gca, 'XTickLabel', stressScenarioLabels)
+xtickangle(18)
+ylabel('Max angle error / deg')
+title('(a) Maximum error under stress conditions')
+legend(stressMethodLabels, 'Location', 'northoutside', 'NumColumns', 3)
+
+nexttile
+bStressRms = bar(stressRmsMat);
+for ii = 1:numel(bStressRms)
+    bStressRms(ii).FaceColor = stressLineColors(ii,:);
+end
+grid on
+set(gca, 'XTickLabel', stressScenarioLabels)
+xtickangle(18)
+ylabel('RMS angle error / deg')
+title('(b) RMS error under stress conditions')
+legend(stressMethodLabels, 'Location', 'northoutside', 'NumColumns', 3)
+
+stressMetricsPngPath = fullfile(figDir, 'dual_hall_stress_conditions_metrics.png');
+exportgraphics(stressMetricFig, stressMetricsPngPath, 'Resolution', 220);
+
+fprintf('\nDual-Hall stress-condition validation\n');
+fprintf('Stress cases include stronger impact, gyro drift, thermal drift and axis coupling.\n');
+fprintf('\nStress metrics:\n');
+for k = 1:height(stressMetrics)
+    fprintf('  %-25s %-16s max %.4f deg, rms %.4f deg\n', ...
+        stressMetrics.scenario_label(k), stressMetrics.method(k), ...
+        stressMetrics.max_error_deg(k), stressMetrics.rms_error_deg(k));
+end
+fprintf('\nSaved stress-condition figures:\n%s\n%s\n', stressPngPath, stressMetricsPngPath);
+fprintf('Saved stress-condition metrics:\n%s\n', stressCsvPath);
 
 %% 局部函数
 function P = collect_hall_params
@@ -1030,16 +1258,72 @@ angle_err_mag_hat = Phi_ang_all*cal.coef_ang_err;
 theta_anglecomp = align_angle(theta_basic - angle_err_mag_hat, theta_mag);
 err_anglecomp = wrap_pi(theta_anglecomp - theta_mag)/P.pole_pairs;
 
+if isfield(cal, 'residual_lut')
+    residual_mag_hat = lookup_residual_lut(theta_anglecomp, cal.residual_lut);
+    theta_lutcomp = align_angle(theta_anglecomp - residual_mag_hat, theta_mag);
+else
+    residual_mag_hat = zeros(size(theta_anglecomp));
+    theta_lutcomp = theta_anglecomp;
+end
+err_lutcomp = wrap_pi(theta_lutcomp - theta_mag)/P.pole_pairs;
+
 result.theta_basic = theta_basic;
 result.theta_sigcomp = theta_sigcomp;
 result.theta_anglecomp = theta_anglecomp;
+result.theta_lutcomp = theta_lutcomp;
 result.err_basic = err_basic;
 result.err_sigcomp = err_sigcomp;
 result.err_anglecomp = err_anglecomp;
+result.err_lutcomp = err_lutcomp;
+result.residual_mag_hat = residual_mag_hat;
 result.sin_norm = sin_norm;
 result.cos_norm = cos_phasecorr;
 result.sin_sigcomp = sin_sigcomp;
 result.cos_sigcomp = cos_sigcomp;
+end
+
+function lut = build_residual_lut(theta_comp, theta_ref, calib_idx)
+% Build a periodic lookup table for deterministic angle residual.
+nBins = 1440;
+theta_comp = theta_comp(:);
+theta_ref = theta_ref(:);
+calib_idx = calib_idx(:);
+
+phase = mod(theta_comp(calib_idx), 2*pi);
+residual = wrap_pi(theta_comp(calib_idx) - theta_ref(calib_idx));
+
+edges = linspace(0, 2*pi, nBins + 1).';
+centers = 0.5*(edges(1:end-1) + edges(2:end));
+binIdx = discretize(phase, edges);
+validSample = ~isnan(binIdx) & isfinite(residual);
+
+lutErr = accumarray(binIdx(validSample), residual(validSample), [nBins 1], @mean, NaN);
+validBin = isfinite(lutErr);
+if nnz(validBin) < 4
+    error('Residual LUT calibration failed: not enough valid bins.');
+end
+
+phaseExt = [centers(validBin) - 2*pi; centers(validBin); centers(validBin) + 2*pi];
+errExt = [lutErr(validBin); lutErr(validBin); lutErr(validBin)];
+[phaseExt, sortIdx] = sort(phaseExt);
+errExt = errExt(sortIdx);
+
+lut.phase_rad = centers;
+lut.err_mag_rad = interp1(phaseExt, errExt, centers, 'pchip');
+end
+
+function residual_hat = lookup_residual_lut(theta_query, lut)
+% Read the periodic residual table by decoded magnetic angle.
+originalSize = size(theta_query);
+phase = mod(theta_query(:), 2*pi);
+
+phaseExt = [lut.phase_rad - 2*pi; lut.phase_rad; lut.phase_rad + 2*pi];
+errExt = [lut.err_mag_rad; lut.err_mag_rad; lut.err_mag_rad];
+[phaseExt, sortIdx] = sort(phaseExt);
+errExt = errExt(sortIdx);
+
+residual_hat = interp1(phaseExt, errExt, phase, 'linear', 'extrap');
+residual_hat = reshape(residual_hat, originalSize);
 end
 
 function data = make_dynamic_scenario(scenarioId, t, polePairs, theta0, seed)
@@ -1092,6 +1376,98 @@ thetaMeas = theta + residual/polePairs + noise;
 data.theta_true = theta;
 data.omega_true = omega;
 data.theta_meas = thetaMeas;
+end
+
+function data = make_stress_scenario(scenarioId, t, ~, ~, seed)
+% 生成更接近项目风险项的压力工况。这里的 angleStress 不是电机真实角度，
+% 而是冲击、温漂或轴间耦合造成的等效测量污染，用来考察算法抗扰能力。
+Ts = t(2) - t(1);
+
+rpmBase = 60;
+rpm = rpmBase + 10*sin(2*pi*0.35*t);
+thetaTrue = cumtrapz(t, rpm*2*pi/60);
+angleStress = zeros(size(t));
+gyroExtra = zeros(size(t));
+temperatureC = 25*ones(size(t));
+gyroBias = deg2rad(0.18);
+gyroBiasDrift = deg2rad(0.02);
+gyroNoise = deg2rad(0.8);
+note = "nominal stress";
+
+switch scenarioId
+    case "strong_impact"
+        tImpact = 0.70;
+        active = t >= tImpact;
+        angleStress(active) = deg2rad(0.55)*exp(-18*(t(active)-tImpact)).* ...
+            sin(2*pi*32*(t(active)-tImpact));
+        gyroExtra(active) = deg2rad(22)*exp(-20*(t(active)-tImpact)).* ...
+            sin(2*pi*38*(t(active)-tImpact));
+        note = "1.6G-like equivalent structural shock";
+
+    case "gyro_temp_drift"
+        temperatureC = 25 + 35*smooth_step(t, 0.20, 1.60) + 2*sin(2*pi*0.20*t);
+        angleStress = deg2rad(0.05)*sin(2*pi*0.45*t + 0.4);
+        gyroBias = deg2rad(0.70);
+        gyroBiasDrift = deg2rad(0.16);
+        note = "larger gyro bias drift plus 35 C Hall thermal ramp";
+
+    case "axis_coupling"
+        adjacentAxis = deg2rad(0.18)*sin(2*pi*1.15*t + 0.25) + ...
+            deg2rad(0.06)*sin(2*pi*4.20*t - 0.40);
+        angleStress = adjacentAxis;
+        rpm = 55 + 35*smooth_step(t, 0.35, 1.20) + 12*sin(2*pi*0.75*t);
+        thetaTrue = cumtrapz(t, rpm*2*pi/60);
+        note = "adjacent-axis coupling projected to current Hall axis";
+
+    case "combined_stress"
+        tImpact = 0.55;
+        active = t >= tImpact;
+        impact = zeros(size(t));
+        impact(active) = deg2rad(0.38)*exp(-16*(t(active)-tImpact)).* ...
+            sin(2*pi*30*(t(active)-tImpact));
+        coupling = deg2rad(0.12)*sin(2*pi*1.40*t + 0.70);
+        temperatureC = 25 + 28*smooth_step(t, 0.15, 1.80);
+        angleStress = impact + coupling;
+        gyroExtra(active) = deg2rad(15)*exp(-18*(t(active)-tImpact)).* ...
+            sin(2*pi*35*(t(active)-tImpact));
+        gyroBias = deg2rad(0.55);
+        gyroBiasDrift = deg2rad(0.10);
+        gyroNoise = deg2rad(1.2);
+        note = "impact, coupling, thermal drift and stronger gyro drift combined";
+
+    otherwise
+        error('Unknown stress scenario: %s', scenarioId);
+end
+
+rng(seed);
+microSlip = deg2rad(0.015)*randn(size(t));
+thetaSensor = thetaTrue + angleStress + microSlip;
+
+data.theta_true = thetaTrue;
+data.omega_true = gradient(thetaTrue, Ts);
+data.theta_sensor = thetaSensor;
+data.temperature_c = temperatureC;
+data.gyro_bias_rad_s = gyroBias;
+data.gyro_bias_drift_rad_s2 = gyroBiasDrift;
+data.gyro_noise_rms_rad_s = gyroNoise;
+data.gyro_extra_rad_s = gyroExtra;
+data.note = note;
+end
+
+function [hall_s_out_v, hall_c_out_v] = apply_hall_temperature_drift(hall_s_v, hall_c_v, temperature_c, P)
+% 温漂模型：温度变化会同时改变 Hall 零点和灵敏度。
+% 数值不是绑定某个确定器件，而是用于压力测试的可调等效参数。
+deltaT = temperature_c(:) - 25;
+offsetTempcoS = 80e-6;     % V/C
+offsetTempcoC = -60e-6;    % V/C
+ampTempcoS = -250e-6;      % 1/C
+ampTempcoC = 180e-6;       % 1/C
+
+hall_s_ac = hall_s_v(:) - P.offset_s_actual_v;
+hall_c_ac = hall_c_v(:) - P.offset_c_actual_v;
+
+hall_s_out_v = hall_s_v(:) + offsetTempcoS*deltaT + ampTempcoS*deltaT.*hall_s_ac;
+hall_c_out_v = hall_c_v(:) + offsetTempcoC*deltaT + ampTempcoC*deltaT.*hall_c_ac;
 end
 
 function omega_gyro = make_gyro_measurement(omega_true, t, bias, biasDrift, noiseRms, seed)

@@ -11,7 +11,7 @@
 init_dual_hall_harmonic_params;
 
 hall_noise_seed = 1808;          % 随机种子，保证每次仿真可复现
-hall_noise_rms_v = 5.0e-4;       % V，单通道白噪声 RMS 值
+hall_noise_rms_v = 0.5e-3;       % V，单通道白噪声 RMS 值
 
 hall_adc_enable = true;          % 是否启用 ADC 量化
 hall_adc_lsb_v = hall_vref_v/(2^hall_adc_bits - 1);  % V，ADC 最低有效位
@@ -39,7 +39,7 @@ hall_gyro_noise_rms_rad_s = deg2rad(0.8);       % rad/s，陀螺角速度白噪�
 hall_gyro_bias_rad_s = deg2rad(0.18);           % rad/s，陀螺固定零偏
 hall_gyro_bias_drift_rad_s2 = deg2rad(0.02);    % rad/s^2，陀螺零偏慢漂移斜率
 
-hall_comp_alpha = 0.995;                        % 互补滤波权重，越接近 1 越相信 gyro 短时积分
+hall_comp_alpha = 0.85;                        % 互补滤波权重，越接近 1 越相信 gyro 短时积分
 hall_kalman_q_angle = deg2rad(0.02)^2;          % Kalman 角度过程噪声方差
 hall_kalman_q_bias = deg2rad(0.01)^2;           % Kalman 陀螺零偏过程噪声方差
 hall_kalman_r_hall = deg2rad(0.08)^2;           % Kalman Hall 角度测量噪声方差
