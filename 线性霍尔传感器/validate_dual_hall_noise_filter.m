@@ -316,7 +316,7 @@ writetable(dynMetrics, dynCsvPath);
 prepend_utf8_bom(dynCsvPath);
 
 dynFig = figure('Name', 'Dual Hall Dynamic Conditions Validation', ...
-    'Color', 'w', 'Position', [50 50 1350 850]);
+    'Color', 'w', 'Position', [50 50 1200 700]);
 tiledlayout(dynFig, 3, 3, 'TileSpacing', 'compact', 'Padding', 'compact');
 
 for s = 1:numel(dynData)
@@ -502,7 +502,7 @@ writetable(fusionMetrics, fusionCsvPath);
 prepend_utf8_bom(fusionCsvPath);
 
 fusionFig = figure('Name', 'Dual Hall Gyro Complementary Kalman Fusion Validation', ...
-    'Color', 'w', 'Position', [40 40 1400 860]);
+    'Color', 'w', 'Position', [40 40 1200 700]);
 tiledlayout(fusionFig, 3, 3, 'TileSpacing', 'compact', 'Padding', 'compact');
 
 for s = 1:numel(fusionData)
@@ -568,7 +568,7 @@ fusionPngPath = fullfile(figDir, 'dual_hall_gyro_fusion_validation.png');
 exportgraphics(fusionFig, fusionPngPath, 'Resolution', 220);
 
 fusionMetricFig = figure('Name', 'Dual Hall Gyro Fusion Metrics', ...
-    'Color', 'w', 'Position', [120 120 1150 560]);
+    'Color', 'w', 'Position', [120 120 1200 700]);
 tiledlayout(fusionMetricFig, 1, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
 
 fusionMaxMat = zeros(numel(dynScenarioLabels), numel(fusionMethodLabels));
@@ -634,15 +634,18 @@ fprintf('Saved Hall/Gyro fusion metrics:\n%s\n', fusionCsvPath);
 % 该段对应“检测精度约为 <= ±0.005 deg @1sigma”的准静态工况：
 % 低速扫角、无冲击、无大加减速，统计角度误差的标准差 sigma。
 low_t = (0:hall_low_speed_ts_s:hall_low_speed_t_stop_s).';
-low_plot_idx = low_t <= min(5, hall_low_speed_t_stop_s);
 low_metric_idx = low_t >= hall_low_speed_metric_start_s;
+low_metric_samples = nnz(low_metric_idx);
 
-lowMethodLabels = fusionMethodLabels;
-lowPlotMethodIdx = [1 2 3 5 6];  % Hide Gyro integration in low-speed figures.
-lowMetrics = table('Size', [0 7], ...
-    'VariableTypes', {'double', 'string', 'double', 'double', 'double', 'double', 'logical'}, ...
-    'VariableNames', {'sweep_rpm', 'method', 'mean_error_deg', 'sigma_1deg', ...
-    'rms_error_deg', 'max_abs_error_deg', 'pass_1sigma'});
+lowEvalMethodIdx = [1 2 3 5 6];  % Low-speed acceptance excludes pure gyro integration.
+lowMethodLabels = fusionMethodLabels(lowEvalMethodIdx);
+lowLineColors = fusionLineColors(lowEvalMethodIdx,:);
+lowMetrics = table('Size', [0 9], ...
+    'VariableTypes', {'double', 'string', 'double', 'double', 'double', ...
+    'double', 'double', 'double', 'logical'}, ...
+    'VariableNames', {'sweep_rpm', 'method', 'metric_samples', 'mean_error_deg', ...
+    'sigma_1sigma_deg', 'rms_error_deg', 'max_abs_error_deg', ...
+    'sigma_to_target_ratio', 'pass_1sigma'});
 lowData = struct([]);
 
 for s = 1:numel(hall_low_speed_sweep_rpm)
@@ -682,7 +685,7 @@ for s = 1:numel(hall_low_speed_sweep_rpm)
     thetaCompLow = align_angle(thetaCompLow, thetaTrue);
     thetaKalmanLow = align_angle(thetaKalmanLow, thetaTrue);
 
-    lowEstimates = {
+    lowEstimatesAll = {
         thetaHall;
         thetaAbLow;
         thetaEsoLow;
@@ -690,17 +693,21 @@ for s = 1:numel(hall_low_speed_sweep_rpm)
         thetaCompLow;
         thetaKalmanLow
     };
+    lowEstimates = lowEstimatesAll(lowEvalMethodIdx);
 
     lowErrors = cell(size(lowEstimates));
     for m = 1:numel(lowMethodLabels)
         lowErrors{m} = wrap_pi(lowEstimates{m} - thetaTrue);
         errDeg = rad2deg(lowErrors{m}(low_metric_idx));
         sigmaDeg = std(errDeg);
+        sigmaRatio = sigmaDeg/hall_detection_sigma_target_deg;
         newRow = table( ...
-            sweepRpm, lowMethodLabels(m), mean(errDeg), sigmaDeg, ...
-            rms_local(errDeg), max(abs(errDeg)), sigmaDeg <= hall_detection_sigma_target_deg, ...
-            'VariableNames', {'sweep_rpm', 'method', 'mean_error_deg', 'sigma_1deg', ...
-            'rms_error_deg', 'max_abs_error_deg', 'pass_1sigma'});
+            sweepRpm, lowMethodLabels(m), low_metric_samples, mean(errDeg), ...
+            sigmaDeg, rms_local(errDeg), max(abs(errDeg)), sigmaRatio, ...
+            sigmaDeg <= hall_detection_sigma_target_deg, ...
+            'VariableNames', {'sweep_rpm', 'method', 'metric_samples', ...
+            'mean_error_deg', 'sigma_1sigma_deg', 'rms_error_deg', ...
+            'max_abs_error_deg', 'sigma_to_target_ratio', 'pass_1sigma'});
         lowMetrics = [lowMetrics; newRow]; %#ok<AGROW>
     end
 
@@ -719,8 +726,14 @@ writetable(lowMetrics, lowCsvPath);
 prepend_utf8_bom(lowCsvPath);
 
 lowPlotCase = min(2, numel(lowData));
+lowPlotMagPeriodS = 60/(lowData(lowPlotCase).rpm*P.pole_pairs);
+lowPlotWindowS = min(hall_low_speed_t_stop_s, max(5, lowPlotMagPeriodS));
+low_plot_idx = find(low_t <= lowPlotWindowS);
+low_plot_decim = max(1, floor(numel(low_plot_idx)/7000));
+low_plot_idx = low_plot_idx(1:low_plot_decim:end);
+
 lowFig = figure('Name', 'Dual Hall Low-Speed Detection Accuracy Validation', ...
-    'Color', 'w', 'Position', [60 60 1350 760]);
+    'Color', 'w', 'Position', [60 60 1200 700]);
 tiledlayout(lowFig, 2, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
 
 nexttile
@@ -737,51 +750,46 @@ legend('clean', 'ADC + noise', 'Location', 'southoutside', 'NumColumns', 2)
 
 nexttile
 hold on
-targetBandX = [low_t(find(low_plot_idx, 1, 'first')) low_t(find(low_plot_idx, 1, 'last')) ...
-    low_t(find(low_plot_idx, 1, 'last')) low_t(find(low_plot_idx, 1, 'first'))];
-targetBandY = [-hall_detection_sigma_target_deg -hall_detection_sigma_target_deg ...
-    hall_detection_sigma_target_deg hall_detection_sigma_target_deg];
-patch(targetBandX, targetBandY, [0.88 0.88 0.88], ...
-    'EdgeColor', 'none', 'FaceAlpha', 0.55, 'HandleVisibility', 'off')
-hLowLines = gobjects(numel(lowPlotMethodIdx), 1);
-for ii = 1:numel(lowPlotMethodIdx)
-    m = lowPlotMethodIdx(ii);
-    hLowLines(ii) = plot(low_t(low_plot_idx), rad2deg(lowData(lowPlotCase).errors{m}(low_plot_idx)), ...
-        'Color', fusionLineColors(m,:), 'LineWidth', 0.9);
+hLowLines = gobjects(numel(lowMethodLabels), 1);
+for ii = 1:numel(lowMethodLabels)
+    hLowLines(ii) = plot(low_t(low_plot_idx), ...
+        rad2deg(lowData(lowPlotCase).errors{ii}(low_plot_idx)), ...
+        'Color', lowLineColors(ii,:), 'LineWidth', 0.9);
 end
 hTarget = yline(hall_detection_sigma_target_deg, '--', 'Color', colorTarget, 'LineWidth', 0.9);
 yline(-hall_detection_sigma_target_deg, '--', 'Color', colorTarget, ...
     'LineWidth', 0.9, 'HandleVisibility', 'off')
+yline(0, ':', 'Color', [0.25 0.25 0.25], 'HandleVisibility', 'off')
 grid on
 xlabel('Time / s')
 ylabel('Angle error / deg')
-title(sprintf('(b) %.1f rpm angle error, target band shown', lowData(lowPlotCase).rpm))
-legend([hLowLines; hTarget], [lowMethodLabels(lowPlotMethodIdx); "±0.005 deg"], ...
+title(sprintf('(b) %.1f rpm error waveform, dashed lines show 1\\sigma target', lowData(lowPlotCase).rpm))
+legend([hLowLines; hTarget], [lowMethodLabels; "±0.005 deg"], ...
     'Location', 'southoutside', 'NumColumns', 3)
 
-lowSigmaMat = zeros(numel(hall_low_speed_sweep_rpm), numel(lowPlotMethodIdx));
+lowSigmaMat = zeros(numel(hall_low_speed_sweep_rpm), numel(lowMethodLabels));
 for s = 1:numel(hall_low_speed_sweep_rpm)
-    for col = 1:numel(lowPlotMethodIdx)
-        m = lowPlotMethodIdx(col);
+    for col = 1:numel(lowMethodLabels)
         row = lowMetrics.sweep_rpm == hall_low_speed_sweep_rpm(s) & ...
-            lowMetrics.method == lowMethodLabels(m);
-        lowSigmaMat(s,col) = lowMetrics.sigma_1deg(row);
+            lowMetrics.method == lowMethodLabels(col);
+        lowSigmaMat(s,col) = lowMetrics.sigma_1sigma_deg(row);
     end
 end
 
 nexttile([1 2])
 bLowSigma = bar(lowSigmaMat);
 for ii = 1:numel(bLowSigma)
-    bLowSigma(ii).FaceColor = fusionLineColors(lowPlotMethodIdx(ii),:);
+    bLowSigma(ii).FaceColor = lowLineColors(ii,:);
 end
 hold on
 yline(hall_detection_sigma_target_deg, '--', 'Color', colorTarget, 'LineWidth', 1.2)
 grid on
 set(gca, 'XTickLabel', string(hall_low_speed_sweep_rpm) + " rpm")
 xtickangle(15)
-ylabel('1\sigma / deg')
-title('(c) Detection precision: standard deviation')
-legend([lowMethodLabels(lowPlotMethodIdx); "target"], 'Location', 'northoutside', 'NumColumns', 3)
+ylabel('1\sigma standard deviation / deg')
+title('(c) Low-speed detection precision, target is statistical 1\sigma')
+legend([lowMethodLabels; "target"], 'Location', 'northoutside', 'NumColumns', 3)
+ylim([0, max([lowSigmaMat(:); hall_detection_sigma_target_deg])*1.22])
 
 axs = findall(lowFig, 'Type', 'Axes');
 for ax = reshape(axs, 1, [])
@@ -800,6 +808,8 @@ exportgraphics(lowFig, lowPngPath, 'Resolution', 220);
 
 fprintf('\nDual-Hall low-speed detection-accuracy validation\n');
 fprintf('Detection target: sigma <= %.4f deg @1sigma\n', hall_detection_sigma_target_deg);
+fprintf('Metric window: t >= %.3f s, samples = %d\n', ...
+    hall_low_speed_metric_start_s, low_metric_samples);
 fprintf('Sweep speeds: %s rpm\n', mat2str(hall_low_speed_sweep_rpm));
 fprintf('\nLow-speed detection metrics:\n');
 for k = 1:height(lowMetrics)
@@ -807,9 +817,11 @@ for k = 1:height(lowMetrics)
     if lowMetrics.pass_1sigma(k)
         passText = "YES";
     end
-    fprintf('  %-5.1f rpm %-16s mean %+8.4f deg, sigma %.4f deg, rms %.4f deg, max %.4f deg, pass %s\n', ...
-        lowMetrics.sweep_rpm(k), lowMetrics.method(k), lowMetrics.mean_error_deg(k), ...
-        lowMetrics.sigma_1deg(k), lowMetrics.rms_error_deg(k), lowMetrics.max_abs_error_deg(k), passText);
+    fprintf('  %-5.1f rpm %-16s sigma %.4f deg (%.2fx target), mean %+8.4f deg, rms %.4f deg, max %.4f deg, pass %s\n', ...
+        lowMetrics.sweep_rpm(k), lowMetrics.method(k), ...
+        lowMetrics.sigma_1sigma_deg(k), lowMetrics.sigma_to_target_ratio(k), ...
+        lowMetrics.mean_error_deg(k), lowMetrics.rms_error_deg(k), ...
+        lowMetrics.max_abs_error_deg(k), passText);
 end
 fprintf('\nSaved low-speed detection figure:\n%s\n', lowPngPath);
 fprintf('Saved low-speed detection metrics:\n%s\n', lowCsvPath);
@@ -936,7 +948,7 @@ writetable(stressMetrics, stressCsvPath);
 prepend_utf8_bom(stressCsvPath);
 
 stressFig = figure('Name', 'Dual Hall Stress Conditions Validation', ...
-    'Color', 'w', 'Position', [40 40 1450 900]);
+    'Color', 'w', 'Position', [40 40 1200 700]);
 tiledlayout(stressFig, numel(stressData), 2, 'TileSpacing', 'compact', 'Padding', 'compact');
 
 for s = 1:numel(stressData)

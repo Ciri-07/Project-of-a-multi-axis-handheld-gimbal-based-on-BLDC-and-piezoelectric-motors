@@ -11,14 +11,14 @@ hall_vref_v = 3.3;               % V, ADC/Hall reference voltage
 hall_offset_v = hall_vref_v/2;   % V, nominal mid-supply offset
 
 hall_amp_s_v = 1.0;              % V, sine-channel fundamental amplitude
-hall_amp_c_v = 0.85;             % V, cosine-channel fundamental amplitude
+hall_amp_c_v = 0.95;             % V, cosine-channel fundamental amplitude
 hall_amp_v = hall_amp_s_v;       % V, nominal amplitude for raw comparison
 
-hall_phase_err_deg = 5;          % deg, cosine channel non-orthogonal phase error
+hall_phase_err_deg = 2;          % deg, cosine channel non-orthogonal phase error
 hall_phase_err_rad = deg2rad(hall_phase_err_deg);
 
-hall_offset_err_s_v = 0.05;      % V, sine-channel zero-offset error
-hall_offset_err_c_v = -0.08;     % V, cosine-channel zero-offset error
+hall_offset_err_s_v = 0.01;      % V, sine-channel zero-offset error
+hall_offset_err_c_v = -0.015;     % V, cosine-channel zero-offset error
 hall_offset_s_actual_v = hall_offset_v + hall_offset_err_s_v;
 hall_offset_c_actual_v = hall_offset_v + hall_offset_err_c_v;
 

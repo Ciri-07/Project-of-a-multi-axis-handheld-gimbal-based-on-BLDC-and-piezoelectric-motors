@@ -11,7 +11,7 @@
 init_dual_hall_harmonic_params;
 
 hall_noise_seed = 1808;          % 随机种子，保证每次仿真可复现
-hall_noise_rms_v = 0.5e-3;       % V，单通道白噪声 RMS 值
+hall_noise_rms_v = 0.8e-3;       % V，单通道白噪声 RMS 值
 
 hall_adc_enable = true;          % 是否启用 ADC 量化
 hall_adc_lsb_v = hall_vref_v/(2^hall_adc_bits - 1);  % V，ADC 最低有效位

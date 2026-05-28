@@ -1,21 +1,21 @@
 ﻿scenario_id,scenario_label,stress_note,method,max_error_deg,rms_error_deg
-strong_impact,Strong impact,"1.6G-like equivalent structural shock",Hall raw,0.514185021725634,0.0496354314272244
-strong_impact,Strong impact,"1.6G-like equivalent structural shock",Alpha-beta,0.502081980098081,0.0481729549517441
-strong_impact,Strong impact,"1.6G-like equivalent structural shock",Discrete ESO,0.515437243118003,0.048498098586024
-strong_impact,Strong impact,"1.6G-like equivalent structural shock",Complementary,0.489463263050099,0.0473649603736699
-strong_impact,Strong impact,"1.6G-like equivalent structural shock",Kalman,0.490981921331077,0.047493029928224
-gyro_temp_drift,Gyro drift + thermal drift,"larger gyro bias drift plus 35 C Hall thermal ramp",Hall raw,0.192552159593367,0.0560376989663418
-gyro_temp_drift,Gyro drift + thermal drift,"larger gyro bias drift plus 35 C Hall thermal ramp",Alpha-beta,0.16399766378491,0.0541362297855286
-gyro_temp_drift,Gyro drift + thermal drift,"larger gyro bias drift plus 35 C Hall thermal ramp",Discrete ESO,0.16333156349491,0.0540848046433713
-gyro_temp_drift,Gyro drift + thermal drift,"larger gyro bias drift plus 35 C Hall thermal ramp",Complementary,0.157673465915868,0.053855957362843
-gyro_temp_drift,Gyro drift + thermal drift,"larger gyro bias drift plus 35 C Hall thermal ramp",Kalman,0.161435656589933,0.0540092655868643
-axis_coupling,Axis coupling,"adjacent-axis coupling projected to current Hall axis",Hall raw,0.280714361057745,0.138494337560867
-axis_coupling,Axis coupling,"adjacent-axis coupling projected to current Hall axis",Alpha-beta,0.25068491813463,0.137729685152787
-axis_coupling,Axis coupling,"adjacent-axis coupling projected to current Hall axis",Discrete ESO,0.249020990127921,0.137705875463313
-axis_coupling,Axis coupling,"adjacent-axis coupling projected to current Hall axis",Complementary,0.245296624715757,0.137657377467742
-axis_coupling,Axis coupling,"adjacent-axis coupling projected to current Hall axis",Kalman,0.249614193041283,0.137705671630841
-combined_stress,Combined stress,"impact, coupling, thermal drift and stronger gyro drift combined",Hall raw,0.341146935763823,0.0965089297775616
-combined_stress,Combined stress,"impact, coupling, thermal drift and stronger gyro drift combined",Alpha-beta,0.330098148082795,0.095591883314132
-combined_stress,Combined stress,"impact, coupling, thermal drift and stronger gyro drift combined",Discrete ESO,0.331426425712786,0.0956233555379482
-combined_stress,Combined stress,"impact, coupling, thermal drift and stronger gyro drift combined",Complementary,0.322107614962172,0.0953089422789668
-combined_stress,Combined stress,"impact, coupling, thermal drift and stronger gyro drift combined",Kalman,0.32535140683375,0.0953912904271406
+strong_impact,Strong impact,"1.6G-like equivalent structural shock",Hall raw,0.514792468007207,0.0500538146346664
+strong_impact,Strong impact,"1.6G-like equivalent structural shock",Alpha-beta,0.502299607396711,0.0482903525166282
+strong_impact,Strong impact,"1.6G-like equivalent structural shock",Discrete ESO,0.515706163078576,0.0486104729424296
+strong_impact,Strong impact,"1.6G-like equivalent structural shock",Complementary,0.489847125168211,0.0474536083755242
+strong_impact,Strong impact,"1.6G-like equivalent structural shock",Kalman,0.491205415581123,0.0475981855988487
+gyro_temp_drift,Gyro drift + thermal drift,"larger gyro bias drift plus 35 C Hall thermal ramp",Hall raw,0.197859555341229,0.056605592354633
+gyro_temp_drift,Gyro drift + thermal drift,"larger gyro bias drift plus 35 C Hall thermal ramp",Alpha-beta,0.167583989490382,0.0544274100747785
+gyro_temp_drift,Gyro drift + thermal drift,"larger gyro bias drift plus 35 C Hall thermal ramp",Discrete ESO,0.166874964712356,0.0543727393420907
+gyro_temp_drift,Gyro drift + thermal drift,"larger gyro bias drift plus 35 C Hall thermal ramp",Complementary,0.16070121724083,0.0541064814963658
+gyro_temp_drift,Gyro drift + thermal drift,"larger gyro bias drift plus 35 C Hall thermal ramp",Kalman,0.165017894132957,0.0542855577648668
+axis_coupling,Axis coupling,"adjacent-axis coupling projected to current Hall axis",Hall raw,0.281503468773911,0.138641689374113
+axis_coupling,Axis coupling,"adjacent-axis coupling projected to current Hall axis",Alpha-beta,0.251663509076906,0.137762072160214
+axis_coupling,Axis coupling,"adjacent-axis coupling projected to current Hall axis",Discrete ESO,0.249873837328974,0.137736112373079
+axis_coupling,Axis coupling,"adjacent-axis coupling projected to current Hall axis",Complementary,0.245950099813338,0.137679396417269
+axis_coupling,Axis coupling,"adjacent-axis coupling projected to current Hall axis",Kalman,0.250467281787551,0.137733589825019
+combined_stress,Combined stress,"impact, coupling, thermal drift and stronger gyro drift combined",Hall raw,0.343770177347882,0.0966730642484138
+combined_stress,Combined stress,"impact, coupling, thermal drift and stronger gyro drift combined",Alpha-beta,0.328737998098412,0.0955940655783136
+combined_stress,Combined stress,"impact, coupling, thermal drift and stronger gyro drift combined",Discrete ESO,0.330115013748471,0.0956226702418844
+combined_stress,Combined stress,"impact, coupling, thermal drift and stronger gyro drift combined",Complementary,0.322195133666864,0.0952923256742833
+combined_stress,Combined stress,"impact, coupling, thermal drift and stronger gyro drift combined",Kalman,0.324245713440166,0.0953866852741454

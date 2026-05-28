@@ -11,12 +11,12 @@ hall_adc_bits = 16;             % ADC resolution used by the project note
 hall_vref_v = 3.3;              % V, ADC / Hall 参考电压
 hall_offset_v = hall_vref_v/2;  % V, 理想中点偏置电压
 hall_amp_s_v = 1.0;             % V，正弦通道实际幅值 A_s
-hall_amp_c_v = 0.85;            % V，余弦通道实际幅值 A_c，用于模拟两路灵敏度/气隙不一致
+hall_amp_c_v = 0.95;            % V，余弦通道实际幅值 A_c，用于模拟两路灵敏度/气隙不一致
 hall_amp_v = hall_amp_s_v;      % V，未补偿对比用的名义幅值
-hall_phase_err_deg = 5;         % deg，余弦通道相位不正交误差 Δφ
+hall_phase_err_deg = 2;         % deg，余弦通道相位不正交误差 Δφ
 hall_phase_err_rad = deg2rad(hall_phase_err_deg);  % rad，余弦通道相位不正交误差
-hall_offset_err_s_v = 0.05;     % V，正弦通道零偏误差
-hall_offset_err_c_v = -0.08;    % V，余弦通道零偏误差
+hall_offset_err_s_v = 0.01;     % V，正弦通道零偏误差
+hall_offset_err_c_v = -0.015;    % V，余弦通道零偏误差
 hall_offset_s_actual_v = hall_offset_v + hall_offset_err_s_v;  % V，正弦通道实际中点电压
 hall_offset_c_actual_v = hall_offset_v + hall_offset_err_c_v;  % V，余弦通道实际中点电压
 % Hall 输出电压以 1.65 V 为中心，上下波动 1 V
